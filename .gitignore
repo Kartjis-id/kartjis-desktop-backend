@@ -1,0 +1,9 @@
+# File environment virtual (env)
+env/
+
+# Direktori environment virtual (env)
+/env/
+
+# File environment virtual Pipenv
+Pipfile
+Pipfile.lock
