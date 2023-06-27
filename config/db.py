@@ -1,6 +1,3 @@
-from sqlalchemy import create_engine, MetaData
+from sqlalchemy.ext.asyncio import create_async_engine
 
-engine=create_engine('mysql+pymysql://root@localhost:3306/kartjis')
-
-meta=MetaData()
-conn=engine.connect()
+engine = create_async_engine("mysql+aiomysql://root@localhost:3306/kartjis")
