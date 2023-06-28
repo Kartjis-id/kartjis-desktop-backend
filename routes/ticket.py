@@ -3,6 +3,7 @@ from sqlalchemy import text
 from config.db import engine
 from starlette.websockets import WebSocket
 from typing import List
+import datetime
 
 ticket = APIRouter()
 
@@ -22,28 +23,31 @@ async def websocket_endpoint(websocket: WebSocket):
     finally:
         websocket_connections.remove(websocket)
 
-
 @ticket.get('/api/tickets')
-async def readData(response: Response):
+async def read_data(response: Response):
     try:
         async with engine.begin() as conn:
             query = """
-            SELECT t.id AS invoiceId, tv.hash AS hash, tv.isScanned AS isVerified, od.NAME AS customerName,
-            od.email AS customerEmail, t.name AS ticketType
+            SELECT od.id AS invoiceId, tv.hash AS hash, tv.isScanned AS isVerified, od.NAME AS customerName,
+            od.email AS customerEmail, t.name AS ticketType, tv.updatedAt as verifiedAt
             FROM ticketverification AS tv
             INNER JOIN orderdetails AS od ON tv.orderDetailId=od.id
             INNER JOIN tickets AS t ON od.ticketId=t.id
             WHERE t.name = 'Regular'
-             """
+            """
             result_proxy = await conn.execute(text(query))
             data = result_proxy.fetchall()
 
-            if not data:
-                raise HTTPException(status_code=404, detail="No tickets found")
+            formatted_data = []
+            for row in data:
+                row_dict = dict(row)
+                if 'verifiedAt' in row_dict:
+                    row_dict['verifiedAt'] = row_dict['verifiedAt'].strftime('%Y-%m-%d %H:%M:%S')
+                formatted_data.append(row_dict)
 
             return {
                 "success": True,
-                "data": [dict(row) for row in data],
+                "data": formatted_data,
             }
     except Exception as e:
         response.status_code = 500  # Internal Server Error
@@ -52,9 +56,8 @@ async def readData(response: Response):
             "error": str(e),
         }
 
-
 @ticket.get('/api/tickets/{hash}/verification')
-async def checkVerification(hash: str, response: Response):
+async def check_verification(hash: str, response: Response):
     try:
         async with engine.begin() as conn:
             query = """
@@ -80,18 +83,19 @@ async def checkVerification(hash: str, response: Response):
             "error": str(e),
         }
 
-
 @ticket.put('/api/tickets/{hash}/verification')
-async def updateVerification(hash: str, response: Response):
+async def update_verification(hash: str, response: Response):
     try:
         async with engine.begin() as conn:
             query_update = """
                 UPDATE ticketverification
-                SET isScanned = 1
+                SET isScanned = 1, updatedAt = :current_datetime
                 WHERE hash = :hash AND isScanned = 0
             """
 
-            result = await conn.execute(text(query_update), {"hash": hash})
+            current_datetime = datetime.datetime.now()
+
+            result = await conn.execute(text(query_update), {"hash": hash, "current_datetime": current_datetime})
             if result.rowcount == 0:
                 raise HTTPException(status_code=404, detail="Ticket not found or already scanned")
 
@@ -103,7 +107,6 @@ async def updateVerification(hash: str, response: Response):
                 "success": True,
                 "message": "Ticket verification updated successfully.",
             }
-
     except Exception as e:
         response.status_code = 500  # Internal Server Error
         return {
