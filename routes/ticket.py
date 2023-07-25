@@ -61,9 +61,11 @@ async def check_verification(hash: str, response: Response):
     try:
         async with engine.begin() as conn:
             query = """
-                SELECT isScanned
-                FROM ticketverification
-                WHERE hash = :hash
+                SELECT tv.isScanned
+                FROM ticketverification AS tv
+                INNER JOIN orderdetails AS od ON tv.orderDetailId=od.id
+                INNER JOIN tickets AS t ON od.ticketId=t.id
+                WHERE tv.hash = :hash AND t.name = 'Regular'
             """
             result = await conn.execute(text(query), {"hash": hash})
             data = result.fetchone()
@@ -88,9 +90,11 @@ async def update_verification(hash: str, response: Response):
     try:
         async with engine.begin() as conn:
             query_update = """
-                UPDATE ticketverification
-                SET isScanned = 1, updatedAt = :current_datetime
-                WHERE hash = :hash AND isScanned = 0
+                UPDATE ticketverification AS tv
+                INNER JOIN orderdetails AS od ON tv.orderDetailId = od.id
+                INNER JOIN tickets AS t ON od.ticketId = t.id
+                SET tv.isScanned = 1, tv.updatedAt = :current_datetime
+                WHERE tv.HASH = :hash AND tv.isScanned = 0 AND t.name = 'Regular'
             """
 
             current_datetime = datetime.datetime.now()
