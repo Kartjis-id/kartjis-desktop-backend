@@ -9,9 +9,11 @@ ticket = APIRouter()
 
 websocket_connections: List[WebSocket] = []
 
+
 async def send_notification(data: dict):
     for connection in websocket_connections:
         await connection.send_json(data)
+
 
 @ticket.websocket("/api/ws/tickets")
 async def websocket_endpoint(websocket: WebSocket):
@@ -23,6 +25,7 @@ async def websocket_endpoint(websocket: WebSocket):
     finally:
         websocket_connections.remove(websocket)
 
+
 @ticket.get('/api/tickets')
 async def read_data(response: Response):
     try:
@@ -33,7 +36,7 @@ async def read_data(response: Response):
             FROM ticketverification AS tv
             INNER JOIN orderdetails AS od ON tv.orderDetailId=od.id
             INNER JOIN tickets AS t ON od.ticketId=t.id
-            WHERE t.name = 'Regular'
+            WHERE t.eventId = '077e48fa-f972-4098-bc6d-e3b37aeb0c44'
             """
             result_proxy = await conn.execute(text(query))
             data = result_proxy.fetchall()
@@ -42,7 +45,8 @@ async def read_data(response: Response):
             for row in data:
                 row_dict = dict(row)
                 if 'verifiedAt' in row_dict:
-                    row_dict['verifiedAt'] = row_dict['verifiedAt'].strftime('%Y-%m-%d %H:%M:%S')
+                    row_dict['verifiedAt'] = row_dict['verifiedAt'].strftime(
+                        '%Y-%m-%d %H:%M:%S')
                 formatted_data.append(row_dict)
 
             return {
@@ -56,6 +60,7 @@ async def read_data(response: Response):
             "error": str(e),
         }
 
+
 @ticket.get('/api/tickets/{hash}/verification')
 async def check_verification(hash: str, response: Response):
     try:
@@ -65,7 +70,7 @@ async def check_verification(hash: str, response: Response):
                 FROM ticketverification AS tv
                 INNER JOIN orderdetails AS od ON tv.orderDetailId=od.id
                 INNER JOIN tickets AS t ON od.ticketId=t.id
-                WHERE tv.hash = :hash AND t.name = 'Regular'
+                WHERE tv.hash = :hash AND t.eventId = '077e48fa-f972-4098-bc6d-e3b37aeb0c44'
             """
             result = await conn.execute(text(query), {"hash": hash})
             data = result.fetchone()
@@ -85,6 +90,7 @@ async def check_verification(hash: str, response: Response):
             "error": str(e),
         }
 
+
 @ticket.put('/api/tickets/{hash}/verification')
 async def update_verification(hash: str, response: Response):
     try:
@@ -94,14 +100,15 @@ async def update_verification(hash: str, response: Response):
                 INNER JOIN orderdetails AS od ON tv.orderDetailId = od.id
                 INNER JOIN tickets AS t ON od.ticketId = t.id
                 SET tv.isScanned = 1, tv.updatedAt = :current_datetime
-                WHERE tv.HASH = :hash AND tv.isScanned = 0 AND t.name = 'Regular'
+                WHERE tv.HASH = :hash AND tv.isScanned = 0 AND t.eventId = '077e48fa-f972-4098-bc6d-e3b37aeb0c44'
             """
 
             current_datetime = datetime.datetime.now()
 
             result = await conn.execute(text(query_update), {"hash": hash, "current_datetime": current_datetime})
             if result.rowcount == 0:
-                raise HTTPException(status_code=404, detail="Ticket not found or already scanned")
+                raise HTTPException(
+                    status_code=404, detail="Ticket not found or already scanned")
 
             if result.rowcount > 0:
                 # Notify subscribed clients about the ticket verification update
