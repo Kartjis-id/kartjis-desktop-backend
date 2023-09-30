@@ -36,7 +36,7 @@ async def read_data(response: Response):
             FROM ticketverification AS tv
             INNER JOIN orderdetails AS od ON tv.orderDetailId=od.id
             INNER JOIN tickets AS t ON od.ticketId=t.id
-            WHERE t.eventId = '077e48fa-f972-4098-bc6d-e3b37aeb0c44'
+            WHERE t.eventId = 'a1e2533f-dc43-4260-8b88-3429730e1d4e'
             """
             result_proxy = await conn.execute(text(query))
             data = result_proxy.fetchall()
@@ -70,7 +70,7 @@ async def check_verification(hash: str, response: Response):
                 FROM ticketverification AS tv
                 INNER JOIN orderdetails AS od ON tv.orderDetailId=od.id
                 INNER JOIN tickets AS t ON od.ticketId=t.id
-                WHERE tv.hash = :hash AND t.eventId = '077e48fa-f972-4098-bc6d-e3b37aeb0c44'
+                WHERE tv.hash = :hash AND t.eventId = 'a1e2533f-dc43-4260-8b88-3429730e1d4e'
             """
             result = await conn.execute(text(query), {"hash": hash})
             data = result.fetchone()
@@ -100,7 +100,7 @@ async def update_verification(hash: str, response: Response):
                 INNER JOIN orderdetails AS od ON tv.orderDetailId = od.id
                 INNER JOIN tickets AS t ON od.ticketId = t.id
                 SET tv.isScanned = 1, tv.updatedAt = :current_datetime
-                WHERE tv.HASH = :hash AND tv.isScanned = 0 AND t.eventId = '077e48fa-f972-4098-bc6d-e3b37aeb0c44'
+                WHERE tv.HASH = :hash AND tv.isScanned = 0 AND t.eventId = 'a1e2533f-dc43-4260-8b88-3429730e1d4e'
             """
 
             current_datetime = datetime.datetime.now()
