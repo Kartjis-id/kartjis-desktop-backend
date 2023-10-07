@@ -36,7 +36,7 @@ async def read_data(response: Response):
             FROM ticketverification AS tv
             INNER JOIN orderdetails AS od ON tv.orderDetailId=od.id
             INNER JOIN tickets AS t ON od.ticketId=t.id
-            WHERE t.eventId = 'a1e2533f-dc43-4260-8b88-3429730e1d4e'
+            WHERE t.eventId = 'e495fb2c-f422-43bf-a815-2eb6967293e5'
             """
             result_proxy = await conn.execute(text(query))
             data = result_proxy.fetchall()
@@ -70,7 +70,7 @@ async def check_verification(hash: str, response: Response):
                 FROM ticketverification AS tv
                 INNER JOIN orderdetails AS od ON tv.orderDetailId=od.id
                 INNER JOIN tickets AS t ON od.ticketId=t.id
-                WHERE tv.hash = :hash AND t.eventId = 'a1e2533f-dc43-4260-8b88-3429730e1d4e'
+                WHERE tv.hash = :hash AND t.eventId = 'e495fb2c-f422-43bf-a815-2eb6967293e5'
             """
             result = await conn.execute(text(query), {"hash": hash})
             data = result.fetchone()
@@ -100,12 +100,12 @@ async def update_verification(hash: str, response: Response):
                 INNER JOIN orderdetails AS od ON tv.orderDetailId = od.id
                 INNER JOIN tickets AS t ON od.ticketId = t.id
                 SET tv.isScanned = 1, tv.updatedAt = :current_datetime
-                WHERE tv.HASH = :hash AND tv.isScanned = 0 AND t.eventId = 'a1e2533f-dc43-4260-8b88-3429730e1d4e'
+                WHERE tv.HASH = :hash AND tv.isScanned = 0 AND t.eventId = 'e495fb2c-f422-43bf-a815-2eb6967293e5'
             """
 
             current_datetime = datetime.datetime.now()
 
-            result = await conn.execute(text(query_update), {"hash": hash, "current_datetime": current_datetime})
+            result = await conn.execute(text(query_update), {"hash": hash, "current_datetime": current_datetime, })
             if result.rowcount == 0:
                 raise HTTPException(
                     status_code=404, detail="Ticket not found or already scanned")
