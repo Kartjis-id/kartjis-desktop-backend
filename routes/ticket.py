@@ -37,7 +37,7 @@ async def read_data(response: Response):
             FROM ticketverification AS tv
             INNER JOIN orderdetails AS od ON tv.orderDetailId=od.id
             INNER JOIN tickets AS t ON od.ticketId=t.id
-            WHERE t.eventId = '1a7ac852-3a9f-4c6e-a9ec-ba964854581b'
+            WHERE t.eventId = '8d8c8cad-c58e-403c-8702-9bb93829f4f8' AND t.name = 'Festival'
             """
             result_proxy = await conn.execute(text(query))
             data = result_proxy.fetchall()
@@ -77,7 +77,7 @@ async def update_verification(hash: str, ticket_verification: TicketVerification
                 FROM ticketverification AS tv
                 INNER JOIN orderdetails AS od ON tv.orderDetailId = od.id
                 INNER JOIN tickets AS t ON od.ticketId = t.id
-                WHERE tv.HASH = :hash AND t.eventId = '1a7ac852-3a9f-4c6e-a9ec-ba964854581b'
+                WHERE tv.HASH = :hash AND t.eventId = '8d8c8cad-c58e-403c-8702-9bb93829f4f8' AND t.name = 'Festival'
             """
 
             check_result = await conn.execute(text(check_query), {"hash": hash})
@@ -146,7 +146,7 @@ async def update_verification(hash: str, ticket_verification: TicketVerification
                 INNER JOIN orderdetails AS od ON tv.orderDetailId = od.id
                 INNER JOIN tickets AS t ON od.ticketId = t.id
                 SET tv.isScanned = :is_verified, tv.updatedAt = :current_datetime
-                WHERE tv.HASH = :hash AND t.eventId = '1a7ac852-3a9f-4c6e-a9ec-ba964854581b'
+                WHERE tv.HASH = :hash AND t.eventId = '8d8c8cad-c58e-403c-8702-9bb93829f4f8' AND t.name = 'Festival'
             """
 
             current_datetime = datetime.datetime.now()
@@ -196,7 +196,7 @@ async def check_verification(hash: str, response: Response):
                 FROM ticketverification AS tv
                 INNER JOIN orderdetails AS od ON tv.orderDetailId=od.id
                 INNER JOIN tickets AS t ON od.ticketId=t.id
-                WHERE tv.hash = :hash AND t.eventId = '1a7ac852-3a9f-4c6e-a9ec-ba964854581b'
+                WHERE tv.hash = :hash AND t.eventId = '8d8c8cad-c58e-403c-8702-9bb93829f4f8' AND t.name = 'Festival'
             """
             result = await conn.execute(text(query), {"hash": hash})
             data = result.fetchone()
