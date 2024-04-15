@@ -37,7 +37,8 @@ async def read_data(response: Response):
             FROM ticketverification AS tv
             INNER JOIN orderdetails AS od ON tv.orderDetailId=od.id
             INNER JOIN tickets AS t ON od.ticketId=t.id
-            WHERE t.eventId = 'e0306093-b0ce-4f31-bb1e-ab8d1089095e' 
+            inner join orders o on od.orderId = o.id
+            WHERE t.eventId = 'e0306093-b0ce-4f31-bb1e-ab8d1089095e' and o.status = "SUCCESS"
             order by od.NAME
             """
             result_proxy = await conn.execute(text(query))
@@ -51,11 +52,13 @@ async def read_data(response: Response):
                         '%Y-%m-%d %H:%M:%S')
                 formatted_data.append(row_dict)
 
-            return {
-                "success": True,
-                "data": formatted_data,
-            }
+        # await engine.dispose()
+        return {
+            "success": True,
+            "data": formatted_data,
+        }
     except Exception as e:
+        print(e)
         response.status_code = 500  # Internal Server Error
         return {
             "success": False,
@@ -78,7 +81,8 @@ async def update_verification(hash: str, ticket_verification: TicketVerification
                 FROM ticketverification AS tv
                 INNER JOIN orderdetails AS od ON tv.orderDetailId = od.id
                 INNER JOIN tickets AS t ON od.ticketId = t.id
-                WHERE tv.HASH = :hash AND t.eventId = 'e0306093-b0ce-4f31-bb1e-ab8d1089095e'
+                inner join orders o on od.orderId = o.id
+                WHERE tv.HASH = :hash AND t.eventId = 'e0306093-b0ce-4f31-bb1e-ab8d1089095e' and o.status = "SUCCESS"
             """
 
             check_result = await conn.execute(text(check_query), {"hash": hash})
@@ -197,7 +201,8 @@ async def check_verification(hash: str, response: Response):
                 FROM ticketverification AS tv
                 INNER JOIN orderdetails AS od ON tv.orderDetailId=od.id
                 INNER JOIN tickets AS t ON od.ticketId=t.id
-                WHERE tv.hash = :hash AND t.eventId = 'e0306093-b0ce-4f31-bb1e-ab8d1089095e'
+                inner join orders o on od.orderId = o.id
+                WHERE tv.hash = :hash AND t.eventId = 'e0306093-b0ce-4f31-bb1e-ab8d1089095e' and o.status = "SUCCESS"
             """
             result = await conn.execute(text(query), {"hash": hash})
             data = result.fetchone()
@@ -234,6 +239,41 @@ async def check_verification(hash: str, response: Response):
                     "ticketNum" : ticket_num
                 }
             }
+    except Exception as e:
+        response.status_code = 500  # Internal Server Error
+        return {
+            "success": False,
+            "error": str(e),
+        }
+
+
+
+@ticket.get('/api/outlier')
+async def read_data(response: Response):
+    try:
+        async with engine.begin() as conn:
+            query = """
+           SELECT email AS emails
+            FROM orderdetails
+            WHERE orderId IN
+            (
+                SELECT od.orderId
+                FROM orders o
+                JOIN orderdetails od ON od.orderId = o.id
+                JOIN events e ON e.id = o.eventId
+                WHERE o.eventId = "e0306093-b0ce-4f31-bb1e-ab8d1089095e"
+                GROUP BY od.orderId
+                HAVING COUNT(DISTINCT od.email) > 1
+            );
+            """
+            result_proxy = await conn.execute(text(query))
+            data = result_proxy.fetchall()
+
+        # await engine.dispose()
+        return {
+            "success": True,
+            "data": data,
+        }
     except Exception as e:
         response.status_code = 500  # Internal Server Error
         return {
