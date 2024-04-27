@@ -38,7 +38,7 @@ async def read_data(response: Response):
             INNER JOIN orderdetails AS od ON tv.orderDetailId=od.id
             INNER JOIN tickets AS t ON od.ticketId=t.id
             inner join orders o on od.orderId = o.id
-            WHERE t.eventId = 'e0306093-b0ce-4f31-bb1e-ab8d1089095e' and o.status = "SUCCESS"
+            WHERE t.eventId = 'e4203ce3-23f1-459b-8e05-275d74486be7' and o.status = "SUCCESS"
             order by od.NAME
             """
             result_proxy = await conn.execute(text(query))
@@ -82,7 +82,7 @@ async def update_verification(hash: str, ticket_verification: TicketVerification
                 INNER JOIN orderdetails AS od ON tv.orderDetailId = od.id
                 INNER JOIN tickets AS t ON od.ticketId = t.id
                 inner join orders o on od.orderId = o.id
-                WHERE tv.HASH = :hash AND t.eventId = 'e0306093-b0ce-4f31-bb1e-ab8d1089095e' and o.status = "SUCCESS"
+                WHERE tv.HASH = :hash AND t.eventId = 'e4203ce3-23f1-459b-8e05-275d74486be7' and o.status = "SUCCESS"
             """
 
             check_result = await conn.execute(text(check_query), {"hash": hash})
@@ -102,7 +102,7 @@ async def update_verification(hash: str, ticket_verification: TicketVerification
                         status_code=400, detail={
                             "message": "Error Ticket already verified",
                              "ticket": {
-                                "customerName": ticket_info[0],
+                                "z": ticket_info[0],
                                 "customerEmail": ticket_info[1],
                                 "invoiceId": ticket_info[2],
                                 "hash" :  ticket_info[3],
@@ -118,7 +118,7 @@ async def update_verification(hash: str, ticket_verification: TicketVerification
                         status_code=400, detail={
                             "message" : "Error Ticket is not verified", 
                             "ticket": {
-                                "customerName": ticket_info[0],
+                                "z": ticket_info[0],
                                 "customerEmail": ticket_info[1],
                                 "invoiceId": ticket_info[2],
                                 "hash" :  ticket_info[3],
@@ -151,7 +151,7 @@ async def update_verification(hash: str, ticket_verification: TicketVerification
                 INNER JOIN orderdetails AS od ON tv.orderDetailId = od.id
                 INNER JOIN tickets AS t ON od.ticketId = t.id
                 SET tv.isScanned = :is_verified, tv.updatedAt = :current_datetime
-                WHERE tv.HASH = :hash AND t.eventId = 'e0306093-b0ce-4f31-bb1e-ab8d1089095e'
+                WHERE tv.HASH = :hash AND t.eventId = 'e4203ce3-23f1-459b-8e05-275d74486be7'
             """
 
             current_datetime = datetime.datetime.now()
@@ -169,7 +169,7 @@ async def update_verification(hash: str, ticket_verification: TicketVerification
                 "success": True,
                 "message": "Success verify ticket" if is_verify else "Success unverify ticket",
                 "ticket": {
-                    "customerName": ticket_info[0],
+                    "z": ticket_info[0],
                     "customerEmail": ticket_info[1],
                     "invoiceId": ticket_info[2],
                     "verifiedAt" : current_datetime,
@@ -202,7 +202,7 @@ async def check_verification(hash: str, response: Response):
                 INNER JOIN orderdetails AS od ON tv.orderDetailId=od.id
                 INNER JOIN tickets AS t ON od.ticketId=t.id
                 inner join orders o on od.orderId = o.id
-                WHERE tv.hash = :hash AND t.eventId = 'e0306093-b0ce-4f31-bb1e-ab8d1089095e' and o.status = "SUCCESS"
+                WHERE tv.hash = :hash AND t.eventId = 'e4203ce3-23f1-459b-8e05-275d74486be7' and o.status = "SUCCESS"
             """
             result = await conn.execute(text(query), {"hash": hash})
             data = result.fetchone()
@@ -229,7 +229,7 @@ async def check_verification(hash: str, response: Response):
             return {
                 "success": True,
                 "ticket": {
-                    "customerName": data[0],
+                    "z": data[0],
                     "customerEmail": data[1],
                     "invoiceId": data[2],
                     "verifiedAt" : data[6].isoformat(),
@@ -261,7 +261,7 @@ async def read_data(response: Response):
                 FROM orders o
                 JOIN orderdetails od ON od.orderId = o.id
                 JOIN events e ON e.id = o.eventId
-                WHERE o.eventId = "e0306093-b0ce-4f31-bb1e-ab8d1089095e"
+                WHERE o.eventId = "e4203ce3-23f1-459b-8e05-275d74486be7"
                 GROUP BY od.orderId
                 HAVING COUNT(DISTINCT od.email) > 1
             );
