@@ -1,30 +1,53 @@
-from fastapi import APIRouter, Response, HTTPException
+import time
+from fastapi import APIRouter, Response, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 from sqlalchemy import text
 from config.db import engine
 from starlette.websockets import WebSocket
-from typing import List
 import datetime
+import uvicorn
 
 ticket = APIRouter()
 
-websocket_connections: List[WebSocket] = []
+websocket_clients = []
 
+@ticket.post("/rfid")
+async def receive_rfid(request: Request):
+    body = await request.json()
+    rfid = body.get("rfid").strip().replace(" ", "")
 
-async def send_notification(data: dict):
-    for connection in websocket_connections:
-        await connection.send_json(data)
+    try:
+        verification_data = await update_verification2(rfid)
+        if verification_data:
+            # Broadcast ke semua klien WebSocket
+            await broadcast(verification_data)
+            return {"message": "RFID processed successfully"}
+        else:
+            return JSONResponse(status_code=400, content={"data": None, "message": "RFID not found"})
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"data": None, "message": str(e)})
 
+# Fungsi untuk broadcast data ke semua klien WebSocket yang terhubung
+async def broadcast(data):
+    for client in websocket_clients:
+        try:
+            await client.send_json(data)
+        except WebSocketDisconnect:
+            websocket_clients.remove(client)
 
-@ticket.websocket("/api/ws/tickets")
+# Endpoint WebSocket untuk mengelola koneksi WebSocket
+@ticket.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    websocket_connections.append(websocket)
+    websocket_clients.append(websocket)
     try:
         while True:
             await websocket.receive_text()
-    finally:
-        websocket_connections.remove(websocket)
-
+    except WebSocketDisconnect:
+        websocket_clients.remove(websocket)
 
 @ticket.get('/api/tickets')
 async def read_data(response: Response):
@@ -36,7 +59,9 @@ async def read_data(response: Response):
             FROM ticketverification AS tv
             INNER JOIN orderdetails AS od ON tv.orderDetailId=od.id
             INNER JOIN tickets AS t ON od.ticketId=t.id
-            WHERE t.eventId = 'e495fb2c-f422-43bf-a815-2eb6967293e5'
+            inner join orders o on od.orderId = o.id
+            WHERE t.eventId = 'a28fa37e-6782-43ed-9353-5ec7d7e967be' and o.status = "SUCCESS"
+            order by od.NAME
             """
             result_proxy = await conn.execute(text(query))
             data = result_proxy.fetchall()
@@ -45,15 +70,15 @@ async def read_data(response: Response):
             for row in data:
                 row_dict = dict(row)
                 if 'verifiedAt' in row_dict:
-                    row_dict['verifiedAt'] = row_dict['verifiedAt'].strftime(
-                        '%Y-%m-%d %H:%M:%S')
+                    row_dict['verifiedAt'] = row_dict['verifiedAt'].isoformat()
                 formatted_data.append(row_dict)
 
-            return {
-                "success": True,
-                "data": formatted_data,
-            }
+        return {
+            "success": True,
+            "data": formatted_data,
+        }
     except Exception as e:
+        print(e)
         response.status_code = 500  # Internal Server Error
         return {
             "success": False,
@@ -61,66 +86,217 @@ async def read_data(response: Response):
         }
 
 
-@ticket.get('/api/tickets/{hash}/verification')
-async def check_verification(hash: str, response: Response):
+async def update_verification2(hash: str):
     try:
         async with engine.begin() as conn:
-            query = """
-                SELECT tv.isScanned
+            # Check if ticket is already verified for verification, or not verified for unverification
+            check_query = """
+                SELECT tv.isScanned, od.name, od.email, od.ticketId, tv.hash, t.name, od.orderId, tv.updatedAt
                 FROM ticketverification AS tv
-                INNER JOIN orderdetails AS od ON tv.orderDetailId=od.id
-                INNER JOIN tickets AS t ON od.ticketId=t.id
-                WHERE tv.hash = :hash AND t.eventId = 'e495fb2c-f422-43bf-a815-2eb6967293e5'
+                INNER JOIN orderdetails AS od ON tv.orderDetailId = od.id
+                INNER JOIN tickets AS t ON od.ticketId = t.id
+                inner join orders o on od.orderId = o.id
+                WHERE tv.HASH = :hash AND t.eventId = 'a28fa37e-6782-43ed-9353-5ec7d7e967be' and o.status = "SUCCESS"
             """
-            result = await conn.execute(text(query), {"hash": hash})
-            data = result.fetchone()
 
-            if data is None:
-                raise HTTPException(status_code=404, detail="Ticket not found")
+            check_result = await conn.execute(text(check_query), {"hash": hash})
+            row = check_result.fetchone()
 
-            is_verified = data[0]
-            return {
+            if not row:
+                raise HTTPException(
+                    status_code=404, detail="Ticket not found"
+                )
+
+            verification_status = row[0]  # Mengambil nilai pertama dari baris hasil query
+            ticket_info = row[1:]
+
+            get_num_query = """
+                SELECT tv.hash FROM tickets t
+                JOIN orderdetails AS od ON od.ticketId = t.id
+                JOIN ticketverification AS tv ON tv.orderDetailId = od.id
+                WHERE od.orderId = :orderId;
+            """
+
+            temp = await conn.execute(text(get_num_query), {"orderId": ticket_info[5]})
+            list_data = temp.fetchall()
+            ticket_num = 1
+
+            for i, row in enumerate(list_data):
+                if row[0] == ticket_info[3]:
+                    ticket_num = i+1
+                    break
+
+            is_verified = 1 if int(verification_status) == 0 else 0
+
+
+            # Update verification status based on isVerify parameter
+            query_update = """
+                UPDATE ticketverification AS tv
+                INNER JOIN orderdetails AS od ON tv.orderDetailId = od.id
+                INNER JOIN tickets AS t ON od.ticketId = t.id
+                SET tv.isScanned = :is_verified, tv.updatedAt = :current_datetime
+                WHERE tv.HASH = :hash AND t.eventId = 'a28fa37e-6782-43ed-9353-5ec7d7e967be'
+            """
+
+            current_datetime = datetime.datetime.now()
+
+            result = await conn.execute(text(query_update), {"hash": hash, "is_verified": is_verified, "current_datetime": current_datetime})
+            if result.rowcount == 0:
+                raise HTTPException(
+                    status_code=404, data="Ticket not found or already scanned"
+                )
+
+            # await send_notification({"message": "Ticket verification updated.", "event": "verification" if is_verify else "unverification"})
+
+            # Construct data response including ticket information
+            data = {
                 "success": True,
-                "isVerified": is_verified,
+                "message": "Success verify ticket" if verification_status else "Success unverify ticket",
+                "ticket": {
+                    "customerName": ticket_info[0],
+                    "customerEmail": ticket_info[1],
+                    "invoiceId": ticket_info[2],
+                    "verifiedAt" : current_datetime.isoformat(),
+                    "ticketType": ticket_info[4],
+                    "isVerified" : int(verification_status),
+                    "hash" :  ticket_info[3],
+                    "ticketNum" : ticket_num
+                }
             }
+
+            return data
+
+    except HTTPException as http_error:
+        raise http_error  # Re-raise HTTPException to return the defined HTTP error response
     except Exception as e:
-        response.status_code = 500  # Internal Server Error
         return {
             "success": False,
             "error": str(e),
+            "ticket": {}  # Empty ticket data in case of error
         }
-
 
 @ticket.put('/api/tickets/{hash}/verification')
 async def update_verification(hash: str, response: Response):
     try:
         async with engine.begin() as conn:
+            # Check if ticket is already verified for verification, or not verified for unverification
+            check_query = """
+                SELECT tv.isScanned, od.name, od.email, od.ticketId, tv.hash, t.name, od.orderId, tv.updatedAt
+                FROM ticketverification AS tv
+                INNER JOIN orderdetails AS od ON tv.orderDetailId = od.id
+                INNER JOIN tickets AS t ON od.ticketId = t.id
+                inner join orders o on od.orderId = o.id
+                WHERE tv.HASH = :hash AND t.eventId = 'a28fa37e-6782-43ed-9353-5ec7d7e967be' and o.status = "SUCCESS"
+            """
+
+            check_result = await conn.execute(text(check_query), {"hash": hash})
+            row = check_result.fetchone()
+
+            if not row:
+                raise HTTPException(
+                    status_code=404, detail="Ticket not found"
+                )
+
+            verification_status = row[0]  # Mengambil nilai pertama dari baris hasil query
+            ticket_info = row[1:]
+
+            get_num_query = """
+                SELECT tv.hash FROM tickets t
+                JOIN orderdetails AS od ON od.ticketId = t.id
+                JOIN ticketverification AS tv ON tv.orderDetailId = od.id
+                WHERE od.orderId = :orderId;
+            """
+
+            temp = await conn.execute(text(get_num_query), {"orderId": ticket_info[5]})
+            list_data = temp.fetchall()
+            ticket_num = 1
+
+            for i, row in enumerate(list_data):
+                if row[0] == ticket_info[3]:
+                    ticket_num = i+1
+                    break
+
+            is_verified = 1 if int(verification_status) == 0 else 0
+
+
+            # Update verification status based on isVerify parameter
             query_update = """
                 UPDATE ticketverification AS tv
                 INNER JOIN orderdetails AS od ON tv.orderDetailId = od.id
                 INNER JOIN tickets AS t ON od.ticketId = t.id
-                SET tv.isScanned = 1, tv.updatedAt = :current_datetime
-                WHERE tv.HASH = :hash AND tv.isScanned = 0 AND t.eventId = 'e495fb2c-f422-43bf-a815-2eb6967293e5'
+                SET tv.isScanned = :is_verified, tv.updatedAt = :current_datetime
+                WHERE tv.HASH = :hash AND t.eventId = 'a28fa37e-6782-43ed-9353-5ec7d7e967be'
             """
 
             current_datetime = datetime.datetime.now()
 
-            result = await conn.execute(text(query_update), {"hash": hash, "current_datetime": current_datetime, })
+            result = await conn.execute(text(query_update), {"hash": hash, "is_verified": is_verified, "current_datetime": current_datetime})
             if result.rowcount == 0:
                 raise HTTPException(
-                    status_code=404, detail="Ticket not found or already scanned")
+                    status_code=404, data="Ticket not found or already scanned"
+                )
 
-            if result.rowcount > 0:
-                # Notify subscribed clients about the ticket verification update
-                await send_notification({"message": "Ticket verification updated.", "event": "verification"})
+            # await send_notification({"message": "Ticket verification updated.", "event": "verification" if is_verify else "unverification"})
 
-            return {
+            # Construct data response including ticket information
+            data = {
                 "success": True,
-                "message": "Ticket verification updated successfully.",
+                "message": "Success verify ticket" if verification_status else "Success unverify ticket",
+                "ticket": {
+                    "customerName": ticket_info[0],
+                    "customerEmail": ticket_info[1],
+                    "invoiceId": ticket_info[2],
+                    "verifiedAt" : current_datetime,
+                    "ticketType": ticket_info[4],
+                    "isVerified" : int(verification_status),
+                    "hash" :  ticket_info[3],
+                    "ticketNum" : ticket_num
+                }
             }
+
+            return data
+
+    except HTTPException as http_error:
+        raise http_error  # Re-raise HTTPException to return the defined HTTP error response
+    except Exception as e:
+        response.status_code = 500  # Internal Server Error
+        return {
+            "success": False,
+            "error": str(e),
+            "ticket": {}  # Empty ticket data in case of error
+        }
+
+@ticket.get('/api/outlier')
+async def read_data(response: Response):
+    try:
+        async with engine.begin() as conn:
+            query = """
+           SELECT email AS emails
+            FROM orderdetails
+            WHERE orderId IN
+            (
+                SELECT od.orderId
+                FROM orders o
+                JOIN orderdetails od ON od.orderId = o.id
+                JOIN events e ON e.id = o.eventId
+                WHERE o.eventId = "a28fa37e-6782-43ed-9353-5ec7d7e967be"
+                GROUP BY od.orderId
+                HAVING COUNT(DISTINCT od.email) > 1
+            );
+            """
+            result_proxy = await conn.execute(text(query))
+            data = result_proxy.fetchall()
+
+        return {
+            "success": True,
+            "data": data,
+        }
     except Exception as e:
         response.status_code = 500  # Internal Server Error
         return {
             "success": False,
             "error": str(e),
         }
+
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=3000, reload=True)
