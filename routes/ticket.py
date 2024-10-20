@@ -3,10 +3,12 @@ from fastapi import APIRouter, Response, HTTPException, Request, WebSocket, WebS
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import text
-from config.db import engine
+from config.db import engine, online_engine
 from starlette.websockets import WebSocket
 import datetime
 import uvicorn
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import sessionmaker
 
 ticket = APIRouter()
 
@@ -316,6 +318,131 @@ async def read_data(response: Response):
             "success": False,
             "error": str(e),
         }
+    
+
+
+
+
+# Sessionmaker for local and online databases
+LocalSession = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+OnlineSession = sessionmaker(online_engine, expire_on_commit=False, class_=AsyncSession)
+
+@ticket.post('/api/sinkron')
+async def sync_data(response: Response):
+    try:
+        async with LocalSession() as local_session, OnlineSession() as online_session:
+            # Step 1: Get new data from online DB (orders with status 'SUCCESS' and the given eventId)
+            online_query = """
+            SELECT o.id AS orderId, o.status, o.customerId, o.eventId, o.createdAt, o.updatedAt,
+                   od.id AS orderDetailId, od.ticketId, od.quantity, od.name, od.email, od.birthDate,
+                   od.phoneNumber, od.gender, od.address, od.socialMedia, od.location, od.commiteeName,
+                   tv.id AS ticketVerificationId, tv.hash, tv.isScanned, tv.updatedAt AS verifiedAt,
+                   c.id AS customerId, c.name AS customerName, c.email AS customerEmail, c.gender AS customerGender, c.phoneNumber AS customerPhone, c.createdAt as cCreated, c.updatedAt as cUpdated, c.birthDate as cBirthDate
+            FROM orders AS o
+            inner JOIN orderDetails AS od ON o.id = od.orderId
+            inner JOIN TicketVerification AS tv ON od.id = tv.orderDetailId
+            inner JOIN customers AS c ON o.customerId = c.id
+            WHERE o.eventId = '25bdff39-fdd0-4a8f-9435-c69bb5370d3a'
+            """
+            online_result = await online_session.execute(text(online_query))
+            online_data = online_result.fetchall()
+
+            # Step 2: Check if order already exists in local DB
+            for row in online_data:
+                order_id = row['orderId']
+                check_query = "SELECT 1 FROM orders WHERE id = :order_id"
+                existing_order = await local_session.execute(text(check_query), {'order_id': order_id})
+                order_exists = existing_order.scalar()
+
+                # Step 3: Insert data into local DB if order doesn't exist
+                if not order_exists:
+                    # Insert into customers table if customer doesn't exist
+                    customer_id = row['customerId']
+                    check_customer_query = "SELECT 1 FROM customers WHERE id = :customer_id"
+                    existing_customer = await local_session.execute(text(check_customer_query), {'customer_id': customer_id})
+                    customer_exists = existing_customer.scalar()
+
+                    if not customer_exists:
+                        insert_customer_query = """
+                        INSERT INTO customers (id, name, email, birthDate, phoneNumber, gender, createdAt, updatedAt) 
+                        VALUES (:customer_id, :customer_name, :customer_email, :birthDate, :phoneNumber,   :customer_gender, :createdAt, :updatedAt)
+                        """
+                        await local_session.execute(text(insert_customer_query), {
+                            'customer_id': row['customerId'],
+                            
+                            'customer_name': row['customerName'],
+                            'customer_email': row['customerEmail'],
+                            'birthDate': row['cBirthDate'],
+                            'phoneNumber': row['customerPhone'],
+                            'createdAt': row['cCreated'],
+                            'updatedAt' : row['cUpdated'],
+                            'customer_gender': row['customerGender'],
+                        })
+
+                    # Insert into orders table
+                    insert_order_query = """
+                    INSERT INTO orders (id, status, customerId, eventId, createdAt, updatedAt) 
+                    VALUES (:order_id, :status, :customer_id, :event_id, :created_at, :updated_at)
+                    """
+                    await local_session.execute(text(insert_order_query), {
+                        'order_id': row['orderId'],
+                        'status': row['status'],
+                        'customer_id': row['customerId'],
+                        'event_id': row['eventId'],
+                        'created_at': row['createdAt'],
+                        'updated_at': row['updatedAt'],
+                    })
+
+                    # Insert into orderDetails table
+                    insert_order_details_query = """
+                    INSERT INTO orderDetails (id, orderId, ticketId, quantity, name, email, birthDate, phoneNumber, gender, address, socialMedia, location, commiteeName) 
+                    VALUES (:orderDetail_id, :order_id, :ticket_id, :quantity, :name, :email, :birthDate, :phoneNumber, :gender, :address, :socialMedia, :location, :commiteeName)
+                    """
+                    await local_session.execute(text(insert_order_details_query), {
+                        'orderDetail_id': row['orderDetailId'],
+                        'order_id': row['orderId'],
+                        'ticket_id': row['ticketId'],
+                        'quantity': row['quantity'],
+                        'name': row['name'],
+                        'email': row['email'],
+                        'birthDate': row['birthDate'],
+                        'phoneNumber': row['phoneNumber'],
+                        'gender': row['gender'],
+                        'address': row['address'],
+                        'socialMedia': row['socialMedia'],
+                        'location': row['location'],
+                        'commiteeName': row['commiteeName'],
+                    })
+
+                    # Insert into ticketVerification table
+                    insert_ticket_verification_query = """
+                    INSERT INTO ticketVerification (id, orderDetailId, hash, isScanned, updatedAt) 
+                    VALUES (:ticketVerification_id, :orderDetail_id, :hash, :isScanned, :verifiedAt)
+                    """
+                    await local_session.execute(text(insert_ticket_verification_query), {
+                        'ticketVerification_id': row['ticketVerificationId'],
+                        'orderDetail_id': row['orderDetailId'],
+                        'hash': row['hash'],
+                        'isScanned': row['isScanned'],
+                        'verifiedAt': row['verifiedAt'],
+                    })
+
+            # Commit the transaction
+            await local_session.commit()
+
+        return {"success": True, "message": "Data synchronization completed."}
+    
+    except Exception as e:
+        print(e)
+        response.status_code = 500  # Internal Server Error
+        return {"success": False, "error": str(e)}
+
+
+
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=3000, reload=True)
+
+
+
+
