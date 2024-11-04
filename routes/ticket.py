@@ -485,6 +485,31 @@ async def sync_data(response: Response):
                     })
                     print(f"Inserted TicketVerification: {row['TicketVerificationId']}")
 
+            # Step 1: Fetch all TicketVerification IDs with isScanned = True in the local data
+            order_details_query_2 = '''
+            SELECT tv.id 
+            FROM orderDetails od 
+            JOIN orders o ON o.id = od.orderId
+            JOIN TicketVerification tv ON tv.orderDetailId = od.id
+            WHERE o.eventId = 'a8498652-57ce-4d3e-8d42-1bcb5a246b2f' AND tv.isScanned = TRUE
+            '''
+
+            # Execute the query to fetch the local TicketVerification IDs
+            local_ticket_verifications = await online_session.execute(text(order_details_query_2))
+            local_verified_ids = [row.id for row in local_ticket_verifications.fetchall()]
+
+            # Step 2: Update TicketVerification records in the online database
+            if local_verified_ids:  # Proceed only if there are IDs to update
+                update_query = '''
+                UPDATE TicketVerification 
+                SET isScanned = TRUE 
+                WHERE id IN :verified_ids
+                '''
+
+                # Execute the update query in the online session
+                await local_session.execute(text(update_query), {'verified_ids': tuple(local_verified_ids)})
+
+            # Commit perubahan di online_session
             # Commit the transaction
             await local_session.commit()
             print("Data synchronization completed successfully.")
