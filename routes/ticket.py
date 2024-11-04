@@ -1,4 +1,7 @@
+import hashlib
 import time
+from typing import List, Optional
+import uuid
 from fastapi import APIRouter, Response, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -335,7 +338,7 @@ async def sync_data(response: Response):
 
 
             query2 = '''
-                select id, name, price, eventId, stock, createdAt, updatedAt, adminFee from tickets;
+                select id, name, price, eventId, stock, createdAt, updatedAt, adminFee from tickets where eventId = 'ee2e57ed-8447-4cca-9623-6d20378c9a1c';
             '''
 
             online_result2 = await online_session.execute(text(query2))
@@ -492,6 +495,266 @@ async def sync_data(response: Response):
         print(f"Error occurred: {e}")
         await local_session.rollback()  # Rollback if there's an error
         response.status_code = 500  # Internal Server Error
+        return {"success": False, "error": str(e)}
+
+class TicketData:
+    def __init__(self, name: str, instagram: Optional[str], domisili: Optional[str], phonenumber: str, datebirth: int, gender: str):
+        self.name = name
+        self.instagram = instagram
+        self.domisili = domisili
+        self.phonenumber = phonenumber
+        self.datebirth = datebirth
+        self.gender = gender
+
+
+# @app.post('/api/ots')
+# async def create_tickets(tickets: List[TicketData], response: Response):
+#     async with engine.begin() as conn:
+#         try:
+#             # INSERT INTO `tickets` (`id`, `name`, `price`, `eventId`, `stock`, `createdAt`, `updatedAt`, `adminFee`)
+# # VALUES 
+# # (UUID(), 'OTS', 0, 'ee2e57ed-8447-4cca-9623-6d20378c9a1c', 100, NOW(3), NOW(3), 0);
+
+# # INSERT INTO `customers` (`id`, `name`, `email`, `birthDate`, `phoneNumber`, `gender`, `createdAt`, `updatedAt`)
+# # VALUES (UUID(), 'TOKU', 'john.doe@example.com', 19900101, '08123456789', 'MALE', NOW(3), NOW(3));
+
+
+# # INSERT INTO `orders` (`id`, `status`, `createdAt`, `updatedAt`, `customerId`, `billId`, `paymentId`, `eventId`, `billLink`, `billToken`, `paymentType`)
+# # VALUES (UUID(), 'SUCCESS', NOW(3), NOW(3), 'd13dbbce-99b6-11ef-8f44-040e3c00a454', null, null, 'ee2e57ed-8447-4cca-9623-6d20378c9a1c', NULL, null, null);
+
+
+# # INSERT INTO `orderdetails` (`id`, `ticketId`, `quantity`, `orderId`, `name`, `email`, `birthDate`, `phoneNumber`, `gender`, `address`, `socialMedia`, `location`, `commiteeName`)
+# # VALUES (UUID(), 'a50cde6a-99b5-11ef-8f44-040e3c00a454', 1, 'f5200024-99b6-11ef-8f44-040e3c00a454', 'John Doe', 'john.doe@example.com', 19900101, '08123456789', 'MALE', '123 Main St', '@johndoe', 'OTS', 'Committee A');
+
+
+# # INSERT INTO `ticketverification` (`id`, `hash`, `isScanned`, `createdAt`, `updatedAt`, `orderDetailId`)
+# # VALUES (UUID(), MD5('email'), 0, NOW(3), NOW(3), @orderDetailId);
+# #             for ticket in tickets:
+#                 # # Generate unique ID and hash for each ticket
+#                 # ticket_id = str(uuid.uuid4())
+#                 # ticket_hash = hashlib.md5(ticket_id.encode()).hexdigest()  # Generate hash from ticket_id
+
+#                 # # Prepare SQL query
+#                 # query = text("""
+#                 #     INSERT INTO ticketverification (id, hash, isScanned, createdAt, updatedAt, orderDetailId, customer_name, customer_email, customer_birth_date, customer_phone_number, customer_gender)
+#                 #     VALUES (:id, :hash, :isScanned, NOW(), NOW(), :orderDetailId, :name, :instagram, :domisili, :phonenumber, :gender)
+#                 # """)
+
+#                 # # Execute the query for each ticket
+#                 # await conn.execute(query, {
+#                 #     'id': ticket_id,
+#                 #     'hash': ticket_hash,
+#                 #     'isScanned': 0,
+#                 #     'orderDetailId': 'some-order-detail-id',  # Ganti dengan orderDetailId yang sesuai
+#                 #     'name': ticket.name,
+#                 #     'instagram': ticket.instagram,
+#                 #     'domisili': ticket.domisili,
+#                 #     'phonenumber': ticket.phonenumber,
+#                 #     'gender': ticket.gender
+#                 # })
+
+#             # return {
+#             #     "success": True,
+#             #     "message": "Tickets successfully created.",
+#             # }
+#         except Exception as e:
+#             print(e)
+#             response.status_code = 500  # Internal Server Error
+#             return {
+#                 "success": False,
+#                 "error": str(e),
+#             }
+
+
+@ticket.post('/api/backup')
+async def backup_data(response: Response):
+    try:
+        async with LocalSession() as local_session, OnlineSession() as online_session:
+
+            # Query data tickets dari local_session
+            query_tickets = '''
+                SELECT id, name, price, eventId, stock, createdAt, updatedAt, adminFee
+                FROM tickets 
+                WHERE eventId = 'ee2e57ed-8447-4cca-9623-6d20378c9a1c';
+            '''
+            local_result_tickets = await local_session.execute(text(query_tickets))
+            local_tickets_data = local_result_tickets.fetchall()
+
+            # Sinkronisasi data tickets ke online_session
+            for ticket in local_tickets_data:
+                check_ticket_query = "SELECT 1 FROM tickets WHERE id = :ticket_id"
+                existing_ticket = await online_session.execute(
+                    text(check_ticket_query), {'ticket_id': ticket['id']}
+                )
+                if not existing_ticket.scalar():
+                    insert_ticket_query = """
+                    INSERT INTO tickets (id, name, price, eventId, stock, createdAt, updatedAt, adminFee) 
+                    VALUES (:id, :name, :price, :eventId, :stock, :createdAt, :updatedAt, :adminFee)
+                    """
+                    await online_session.execute(text(insert_ticket_query), {
+                        'id': ticket['id'],
+                        'name': ticket['name'],
+                        'price': ticket['price'],
+                        'eventId': ticket['eventId'],
+                        'stock': ticket['stock'],
+                        'createdAt': ticket['createdAt'],
+                        'updatedAt': ticket['updatedAt'],
+                        'adminFee': ticket['adminFee']
+                    })
+
+            # First, fetch IDs of orderDetails for a specific event from local data
+            order_details_query_1 = '''
+            SELECT od.id 
+            FROM orderDetails od 
+            JOIN orders o ON o.id = od.orderId
+            WHERE o.eventId = 'ee2e57ed-8447-4cca-9623-6d20378c9a1c'
+            '''
+
+            # Execute the first query to get the local data
+            order_details_local = await local_session.execute(text(order_details_query_1))
+            local_data = [row.id for row in order_details_local.fetchall()]  # Extract IDs for use in NOT IN
+
+            # Second query: Fetch detailed information for orderDetails not in local_data
+            order_details_query_2 = """
+            SELECT od.id AS orderDetailId, od.orderId, od.ticketId, od.quantity, od.name, od.email, 
+                od.birthDate, od.phoneNumber, od.gender, od.address, od.socialMedia, od.location, 
+                od.commiteeName, o.status, o.customerId, o.eventId, o.createdAt AS orderCreatedAt, 
+                o.updatedAt AS orderUpdatedAt, c.id AS customerId, c.name AS customerName, 
+                c.email AS customerEmail, c.gender AS customerGender, c.phoneNumber AS customerPhone, 
+                c.createdAt AS customerCreatedAt, c.updatedAt AS customerUpdatedAt, c.birthDate AS customerBirthDate, 
+                tv.id AS TicketVerificationId, tv.hash, tv.isScanned, tv.updatedAt AS verifiedAt
+            FROM orderDetails AS od
+            INNER JOIN orders AS o ON od.orderId = o.id
+            LEFT JOIN customers AS c ON o.customerId = c.id
+            LEFT JOIN TicketVerification AS tv ON od.id = tv.orderDetailId
+            WHERE o.eventId = 'ee2e57ed-8447-4cca-9623-6d20378c9a1c' AND od.id NOT IN :order_details_local
+            """
+
+            # Execute the second query with the list of IDs from the first query
+            local_order_details = await local_session.execute(text(order_details_query_2), {'order_details_local': tuple(local_data)})
+            order_details_data = local_order_details.fetchall()
+
+
+            # Sinkronisasi data orderDetails dan relasi terkait ke online_session
+            print(order_details_data)
+            for row in order_details_data:
+                # Sinkronisasi data customer
+                if row['customerId']:
+                    check_customer_query = "SELECT 1 FROM customers WHERE id = :customer_id"
+                    customer_exists = await online_session.execute(
+                        text(check_customer_query), {'customer_id': row['customerId']}
+                    )
+                    if not customer_exists.scalar():
+                        insert_customer_query = """
+                        INSERT INTO customers (id, name, email, birthDate, phoneNumber, gender, createdAt, updatedAt)
+                        VALUES (:id, :name, :email, :birthDate, :phoneNumber, :gender, :createdAt, :updatedAt)
+                        """
+                        await online_session.execute(text(insert_customer_query), {
+                            'id': row['customerId'],
+                            'name': row['customerName'],
+                            'email': row['customerEmail'],
+                            'birthDate': row['customerBirthDate'],
+                            'phoneNumber': row['customerPhone'],
+                            'gender': row['customerGender'],
+                            'createdAt': row['customerCreatedAt'],
+                            'updatedAt': row['customerUpdatedAt']
+                        })
+
+                # Sinkronisasi data orders
+                check_order_query = "SELECT 1 FROM orders WHERE id = :order_id"
+                order_exists = await online_session.execute(
+                    text(check_order_query), {'order_id': row['orderId']}
+                )
+                if not order_exists.scalar():
+                    insert_order_query = """
+                    INSERT INTO orders (id, status, customerId, eventId, createdAt, updatedAt)
+                    VALUES (:id, :status, :customerId, :eventId, :createdAt, :updatedAt)
+                    """
+                    await online_session.execute(text(insert_order_query), {
+                        'id': row['orderId'],
+                        'status': row['status'],
+                        'customerId': row['customerId'],
+                        'eventId': row['eventId'],
+                        'createdAt': row['orderCreatedAt'],
+                        'updatedAt': row['orderUpdatedAt']
+                    })
+
+                # Sinkronisasi data orderDetails
+                insert_order_detail_query = """
+                INSERT INTO orderDetails (id, orderId, ticketId, quantity, name, email, birthDate, phoneNumber, 
+                                          gender, address, socialMedia, location, commiteeName)
+                VALUES (:id, :orderId, :ticketId, :quantity, :name, :email, :birthDate, :phoneNumber, :gender, 
+                        :address, :socialMedia, :location, :commiteeName)
+                """
+                await online_session.execute(text(insert_order_detail_query), {
+                    'id': row['orderDetailId'],
+                    'orderId': row['orderId'],
+                    'ticketId': row['ticketId'],
+                    'quantity': row['quantity'],
+                    'name': row['name'],
+                    'email': row['email'],
+                    'birthDate': row['birthDate'],
+                    'phoneNumber': row['phoneNumber'],
+                    'gender': row['gender'],
+                    'address': row['address'],
+                    'socialMedia': row['socialMedia'],
+                    'location': row['location'],
+                    'commiteeName': row['commiteeName']
+                })
+
+                # Sinkronisasi data TicketVerification jika ada
+                if row['TicketVerificationId']:
+                    check_tv_query = "SELECT 1 FROM TicketVerification WHERE id = :tv_id"
+                    tv_exists = await online_session.execute(
+                        text(check_tv_query), {'tv_id': row['TicketVerificationId']}
+                    )
+                    if not tv_exists.scalar():
+                        insert_tv_query = """
+                        INSERT INTO TicketVerification (id, orderDetailId, hash, isScanned, updatedAt)
+                        VALUES (:id, :orderDetailId, :hash, :isScanned, :updatedAt)
+                        """
+                        await online_session.execute(text(insert_tv_query), {
+                            'id': row['TicketVerificationId'],
+                            'orderDetailId': row['orderDetailId'],
+                            'hash': row['hash'],
+                            'isScanned': row['isScanned'],
+                            'updatedAt': row['verifiedAt']
+                        })
+
+
+           # Step 1: Fetch all TicketVerification IDs with isScanned = True in the local data
+            order_details_query_2 = '''
+            SELECT tv.id 
+            FROM orderDetails od 
+            JOIN orders o ON o.id = od.orderId
+            JOIN TicketVerification tv ON tv.orderDetailId = od.id
+            WHERE o.eventId = 'ee2e57ed-8447-4cca-9623-6d20378c9a1c' AND tv.isScanned = TRUE
+            '''
+
+            # Execute the query to fetch the local TicketVerification IDs
+            local_ticket_verifications = await local_session.execute(text(order_details_query_2))
+            local_verified_ids = [row.id for row in local_ticket_verifications.fetchall()]
+
+            # Step 2: Update TicketVerification records in the online database
+            if local_verified_ids:  # Proceed only if there are IDs to update
+                update_query = '''
+                UPDATE TicketVerification 
+                SET isScanned = TRUE 
+                WHERE id IN :verified_ids
+                '''
+
+                # Execute the update query in the online session
+                await online_session.execute(text(update_query), {'verified_ids': tuple(local_verified_ids)})
+
+            # Commit perubahan di online_session
+            await online_session.commit()
+            print("Data backup to online completed successfully.")
+            return {"success": True, "message": "Data backup to online completed."}
+
+    except Exception as e:
+        print(f"Error occurred: {e}")
+        await online_session.rollback()
+        response.status_code = 500
         return {"success": False, "error": str(e)}
 
 
