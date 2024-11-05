@@ -1,4 +1,5 @@
 import hashlib
+import random
 import time
 from typing import List, Optional
 import uuid
@@ -9,6 +10,7 @@ from sqlalchemy import text
 from config.db import engine, online_engine
 from starlette.websockets import WebSocket
 import datetime
+from datetime import datetime
 import uvicorn
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
@@ -522,73 +524,145 @@ async def sync_data(response: Response):
         response.status_code = 500  # Internal Server Error
         return {"success": False, "error": str(e)}
 
-class TicketData:
-    def __init__(self, name: str, instagram: Optional[str], domisili: Optional[str], phonenumber: str, datebirth: int, gender: str):
-        self.name = name
-        self.instagram = instagram
-        self.domisili = domisili
-        self.phonenumber = phonenumber
-        self.datebirth = datebirth
-        self.gender = gender
+
+class TicketData(BaseModel):
+    customer_name: str
+    customer_email: str
+    customer_birthdate: int
+    customer_phone: str
+    customer_gender: str
+    address: str
+    social_media: str
+    ticket_name: str
+
+# Assume `engine` is already defined and connected to the database
+
+@ticket.post('/api/ots')
+async def create_tickets(tickets: List[TicketData], response: Response):
+    async with engine.begin() as conn:
+        try:
+            for ticket in tickets:
+                ticket_id = str(uuid.uuid4())
+                customer_id = str(uuid.uuid4())
+                order_id = str(uuid.uuid4())
+                order_detail_id = str(uuid.uuid4())
+                verification_id = str(uuid.uuid4())
+                current_time = datetime.utcnow()
+
+                result = await conn.execute(
+                    text("SELECT id FROM `tickets` WHERE `name` = :name and `eventId` = :eventId"),
+                    {"name": ticket.ticket_name, "eventId": "a8498652-57ce-4d3e-8d42-1bcb5a246b2f"}
+                )
+                existing_ticket = result.fetchone()
+
+                if existing_ticket:
+                    ticket_id = existing_ticket[0]
+                else:
+                    
+                    await conn.execute(
+                        text("""
+                            INSERT INTO `tickets` (`id`, `name`, `price`, `eventId`, `stock`, `createdAt`, `updatedAt`, `adminFee`)
+                            VALUES (:id, :name, :price, :eventId, :stock, :createdAt, :updatedAt, 0)
+                        """),
+                        {
+                            "id": ticket_id,
+                            "name": ticket.ticket_name,
+                            "price": 0,
+                            "eventId": "a8498652-57ce-4d3e-8d42-1bcb5a246b2f",
+                            "stock": 100,
+                            "createdAt": current_time,
+                            "updatedAt": current_time,
+                        }
+                    )
+                # Insert into `customers`
+                await conn.execute(
+                    text("""
+                        INSERT INTO `customers` (`id`, `name`, `email`, `birthDate`, `phoneNumber`, `gender`, `createdAt`, `updatedAt`)
+                        VALUES (:id, :name, :email, :birthDate, :phoneNumber, :gender, :createdAt, :updatedAt)
+                    """),
+                    {
+                        "id": customer_id,
+                        "name": ticket.customer_name,
+                        "email": ticket.customer_email,
+                        "birthDate": ticket.customer_birthdate,
+                        "phoneNumber": ticket.customer_phone,
+                        "gender": ticket.customer_gender,
+                        "createdAt": current_time,
+                        "updatedAt": current_time,
+                    }
+                )
+
+                # Insert into `orders`
+                await conn.execute(
+                    text("""
+                        INSERT INTO `orders` (`id`, `status`, `createdAt`, `updatedAt`, `customerId`, `eventId`)
+                        VALUES (:id, 'SUCCESS', :createdAt, :updatedAt, :customerId, :eventId)
+                    """),
+                    {
+                        "id": order_id,
+                        "createdAt": current_time,
+                        "updatedAt": current_time,
+                        "customerId": customer_id,
+                        "eventId": 'a8498652-57ce-4d3e-8d42-1bcb5a246b2f',
+                    }
+                )
+
+                # Insert into `orderdetails`
+                await conn.execute(
+                    text("""
+                        INSERT INTO `orderdetails` (`id`, `ticketId`, `quantity`, `orderId`, `name`, `email`, `birthDate`, `phoneNumber`, `gender`, `address`, `socialMedia`, `location`, `commiteeName`)
+                        VALUES (:id, :ticketId, 1, :orderId, :name, :email, :birthDate, :phoneNumber, :gender, :address, :socialMedia, :location, :commiteeName)
+                    """),
+                    {
+                        "id": order_detail_id,
+                        "ticketId": ticket_id,
+                        "orderId": order_id,
+                        "name": ticket.customer_name,
+                        "email": ticket.customer_email,
+                        "birthDate": ticket.customer_birthdate,
+                        "phoneNumber": ticket.customer_phone,
+                        "gender": ticket.customer_gender,
+                        "address": ticket.address,
+                        "socialMedia": ticket.social_media,
+                        "location": ticket.ticket_name,
+                        "commiteeName": None,
+                    }
+                )
+
+                # Menggabungkan nilai email, orderDetailId, dan createdAt
+                random_number = random.randint(1000, 9999)  # Menghasilkan angka acak antara 1000 dan 9999
+                combined_string = f"{ticket.customer_email}{order_detail_id}{current_time}{random_number}"
 
 
-# @app.post('/api/ots')
-# async def create_tickets(tickets: List[TicketData], response: Response):
-#     async with engine.begin() as conn:
-#         try:
-#             # INSERT INTO `tickets` (`id`, `name`, `price`, `eventId`, `stock`, `createdAt`, `updatedAt`, `adminFee`)
-# # VALUES 
-# # (UUID(), 'OTS', 0, 'a8498652-57ce-4d3e-8d42-1bcb5a246b2f', 100, NOW(3), NOW(3), 0);
+                # Menghasilkan hash MD5
+                hash_value = hashlib.md5(combined_string.encode()).hexdigest()
+                await conn.execute(
+                    text("""
+                        INSERT INTO `ticketverification` (`id`, `hash`, `isScanned`, `createdAt`, `updatedAt`, `orderDetailId`)
+                        VALUES (:id, :hash, 0, :createdAt, :updatedAt, :orderDetailId)
+                    """),
+                    {
+                        "id": verification_id,
+                        "hash": hash_value,
+                        "createdAt": current_time,
+                        "updatedAt": current_time,
+                        "orderDetailId": order_detail_id,
+                    }
+                )
 
-# # INSERT INTO `customers` (`id`, `name`, `email`, `birthDate`, `phoneNumber`, `gender`, `createdAt`, `updatedAt`)
-# # VALUES (UUID(), 'TOKU', 'john.doe@example.com', 19900101, '08123456789', 'MALE', NOW(3), NOW(3));
+            return {
+                "success": True,
+                "message": "Tickets successfully created.",
+            }
 
+        except Exception as e:
+            print(e)
+            response.status_code = 500  # Internal Server Error
+            return {
+                "success": False,
+                "error": str(e),
+            }
 
-# # INSERT INTO `orders` (`id`, `status`, `createdAt`, `updatedAt`, `customerId`, `billId`, `paymentId`, `eventId`, `billLink`, `billToken`, `paymentType`)
-# # VALUES (UUID(), 'SUCCESS', NOW(3), NOW(3), 'd13dbbce-99b6-11ef-8f44-040e3c00a454', null, null, 'a8498652-57ce-4d3e-8d42-1bcb5a246b2f', NULL, null, null);
-
-
-# # INSERT INTO `orderdetails` (`id`, `ticketId`, `quantity`, `orderId`, `name`, `email`, `birthDate`, `phoneNumber`, `gender`, `address`, `socialMedia`, `location`, `commiteeName`)
-# # VALUES (UUID(), 'a50cde6a-99b5-11ef-8f44-040e3c00a454', 1, 'f5200024-99b6-11ef-8f44-040e3c00a454', 'John Doe', 'john.doe@example.com', 19900101, '08123456789', 'MALE', '123 Main St', '@johndoe', 'OTS', 'Committee A');
-
-
-# # INSERT INTO `ticketverification` (`id`, `hash`, `isScanned`, `createdAt`, `updatedAt`, `orderDetailId`)
-# # VALUES (UUID(), MD5('email'), 0, NOW(3), NOW(3), @orderDetailId);
-# #             for ticket in tickets:
-#                 # # Generate unique ID and hash for each ticket
-#                 # ticket_id = str(uuid.uuid4())
-#                 # ticket_hash = hashlib.md5(ticket_id.encode()).hexdigest()  # Generate hash from ticket_id
-
-#                 # # Prepare SQL query
-#                 # query = text("""
-#                 #     INSERT INTO ticketverification (id, hash, isScanned, createdAt, updatedAt, orderDetailId, customer_name, customer_email, customer_birth_date, customer_phone_number, customer_gender)
-#                 #     VALUES (:id, :hash, :isScanned, NOW(), NOW(), :orderDetailId, :name, :instagram, :domisili, :phonenumber, :gender)
-#                 # """)
-
-#                 # # Execute the query for each ticket
-#                 # await conn.execute(query, {
-#                 #     'id': ticket_id,
-#                 #     'hash': ticket_hash,
-#                 #     'isScanned': 0,
-#                 #     'orderDetailId': 'some-order-detail-id',  # Ganti dengan orderDetailId yang sesuai
-#                 #     'name': ticket.name,
-#                 #     'instagram': ticket.instagram,
-#                 #     'domisili': ticket.domisili,
-#                 #     'phonenumber': ticket.phonenumber,
-#                 #     'gender': ticket.gender
-#                 # })
-
-#             # return {
-#             #     "success": True,
-#             #     "message": "Tickets successfully created.",
-#             # }
-#         except Exception as e:
-#             print(e)
-#             response.status_code = 500  # Internal Server Error
-#             return {
-#                 "success": False,
-#                 "error": str(e),
-#             }
 
 
 @ticket.post('/api/backup')
@@ -604,6 +678,8 @@ async def backup_data(response: Response):
             '''
             local_result_tickets = await local_session.execute(text(query_tickets))
             local_tickets_data = local_result_tickets.fetchall()
+
+            print(local_tickets_data)
 
             # Sinkronisasi data tickets ke online_session
             for ticket in local_tickets_data:
@@ -629,18 +705,39 @@ async def backup_data(response: Response):
 
             # First, fetch IDs of orderDetails for a specific event from local data
             order_details_query_1 = '''
-            SELECT od.id 
-            FROM orderDetails od 
-            JOIN orders o ON o.id = od.orderId
-            WHERE o.eventId = 'a8498652-57ce-4d3e-8d42-1bcb5a246b2f'
+            SELECT od.id
+            FROM TicketVerification AS tv
+            INNER JOIN orderDetails AS od ON tv.orderDetailId=od.id
+            INNER JOIN tickets AS t ON od.ticketId=t.id
+            inner join orders o on od.orderId = o.id
+            WHERE t.eventId = 'a8498652-57ce-4d3e-8d42-1bcb5a246b2f' and o.status = "SUCCESS"
+            order by od.NAME
             '''
 
             # Execute the first query to get the local data
             order_details_local = await local_session.execute(text(order_details_query_1))
             local_data = [row.id for row in order_details_local.fetchall()]  # Extract IDs for use in NOT IN
+            print(len(local_data))
 
-            # Second query: Fetch detailed information for orderDetails not in local_data
+
+
+                        # Second query: Fetch detailed information for orderDetails not in local_data
             order_details_query_2 = """
+            SELECT od.id
+            from orderDetails AS od 
+            INNER JOIN tickets AS t ON od.ticketId=t.id
+            inner join orders o on od.orderId = o.id
+            WHERE t.eventId = 'a8498652-57ce-4d3e-8d42-1bcb5a246b2f' and o.status = "SUCCESS" AND od.id NOT IN :order_details_local
+            """
+
+            # Execute the second query with the list of IDs from the first query
+            local_order_details = await online_session.execute(text(order_details_query_2), {'order_details_local': local_data})
+            order_details_data = local_order_details.fetchall()
+            print(order_details_data)
+
+
+                        # Second query: Fetch detailed information for orderDetails not in local_data
+            order_details_query_3 = """
             SELECT od.id AS orderDetailId, od.orderId, od.ticketId, od.quantity, od.name, od.email, 
                 od.birthDate, od.phoneNumber, od.gender, od.address, od.socialMedia, od.location, 
                 od.commiteeName, o.status, o.customerId, o.eventId, o.createdAt AS orderCreatedAt, 
@@ -650,19 +747,20 @@ async def backup_data(response: Response):
                 tv.id AS TicketVerificationId, tv.hash, tv.isScanned, tv.updatedAt AS verifiedAt
             FROM orderDetails AS od
             INNER JOIN orders AS o ON od.orderId = o.id
-            LEFT JOIN customers AS c ON o.customerId = c.id
-            LEFT JOIN TicketVerification AS tv ON od.id = tv.orderDetailId
-            WHERE o.eventId = 'a8498652-57ce-4d3e-8d42-1bcb5a246b2f' AND od.id NOT IN :order_details_local
+            left JOIN customers AS c ON o.customerId = c.id
+            INNER JOIN TicketVerification AS tv ON od.id = tv.orderDetailId
+            WHERE od.id IN :order_details_local and o.eventId = 'a8498652-57ce-4d3e-8d42-1bcb5a246b2f' 
             """
 
             # Execute the second query with the list of IDs from the first query
-            local_order_details = await local_session.execute(text(order_details_query_2), {'order_details_local': tuple(local_data)})
-            order_details_data = local_order_details.fetchall()
+            local_order_details3 = await online_session.execute(text(order_details_query_3), {'order_details_local': order_details_data})
+            order_details_data3 = local_order_details3.fetchall()
+
 
 
             # Sinkronisasi data orderDetails dan relasi terkait ke online_session
-            print(order_details_data)
-            for row in order_details_data:
+            print(order_details_data3)
+            for row in order_details_data3:
                 # Sinkronisasi data customer
                 if row['customerId']:
                     check_customer_query = "SELECT 1 FROM customers WHERE id = :customer_id"
