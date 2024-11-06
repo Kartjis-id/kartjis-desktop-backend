@@ -638,7 +638,7 @@ async def create_tickets(tickets: List[TicketData], response: Response):
                 await conn.execute(
                     text("""
                         INSERT INTO `ticketverification` (`id`, `hash`, `isScanned`, `createdAt`, `updatedAt`, `orderDetailId`)
-                        VALUES (:id, :hash, 0, :createdAt, :updatedAt, :orderDetailId)
+                        VALUES (:id, :hash, 1, :createdAt, :updatedAt, :orderDetailId)
                     """),
                     {
                         "id": verification_id,
@@ -707,7 +707,7 @@ async def backup_data(response: Response):
             from orderDetails AS od 
             INNER JOIN tickets AS t ON od.ticketId=t.id
             inner join orders o on od.orderId = o.id
-            WHERE t.eventId = 'a8498652-57ce-4d3e-8d42-1bcb5a246b2f' and o.status = "SUCCESS" and t.name like :ticket_name
+            WHERE t.eventId = 'a8498652-57ce-4d3e-8d42-1bcb5a246b2f' and o.status = "SUCCESS" and (t.name like :ticket_name or t.name = 'Instansi')
             """
 
 
@@ -733,7 +733,7 @@ async def backup_data(response: Response):
                 INNER JOIN TicketVerification AS tv ON od.id = tv.orderDetailId
                 WHERE od.id NOT IN :online_data 
                 AND o.eventId = 'a8498652-57ce-4d3e-8d42-1bcb5a246b2f' 
-                AND t.name LIKE :ticket_name
+                AND (t.name like :ticket_name or t.name = 'Instansi')
             """
 
             # Persiapkan parameter
