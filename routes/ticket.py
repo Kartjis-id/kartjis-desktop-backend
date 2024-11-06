@@ -9,7 +9,6 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from config.db import engine, online_engine
 from starlette.websockets import WebSocket
-import datetime
 from datetime import datetime
 import uvicorn
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -145,7 +144,7 @@ async def update_verification2(hash: str):
                 WHERE tv.HASH = :hash AND t.eventId = 'a8498652-57ce-4d3e-8d42-1bcb5a246b2f' 
             """
 
-            current_datetime = datetime.datetime.now()
+            current_datetime = datetime.now()
 
             result = await conn.execute(text(query_update), {"hash": hash, "is_verified": is_verified, "current_datetime": current_datetime})
             if result.rowcount == 0:
@@ -259,7 +258,7 @@ async def update_verification(hash: str, request: Request, response: Response):
                 WHERE tv.HASH = :hash AND t.eventId = 'a8498652-57ce-4d3e-8d42-1bcb5a246b2f'
             """
 
-            current_datetime = datetime.datetime.now()
+            current_datetime = datetime.now()
 
             result = await conn.execute(text(query_update), {"hash": hash, "is_verified": is_verified, "current_datetime": current_datetime})
 
@@ -679,7 +678,6 @@ async def backup_data(response: Response):
             local_result_tickets = await local_session.execute(text(query_tickets))
             local_tickets_data = local_result_tickets.fetchall()
 
-            print(local_tickets_data)
 
             # Sinkronisasi data tickets ke online_session
             for ticket in local_tickets_data:
@@ -703,63 +701,54 @@ async def backup_data(response: Response):
                         'adminFee': ticket['adminFee']
                     })
 
-            # First, fetch IDs of orderDetails for a specific event from local data
-            order_details_query_1 = '''
-            SELECT od.id
-            FROM TicketVerification AS tv
-            INNER JOIN orderDetails AS od ON tv.orderDetailId=od.id
-            INNER JOIN tickets AS t ON od.ticketId=t.id
-            inner join orders o on od.orderId = o.id
-            WHERE t.eventId = 'a8498652-57ce-4d3e-8d42-1bcb5a246b2f' and o.status = "SUCCESS"
-            order by od.NAME
-            '''
-
-            # Execute the first query to get the local data
-            order_details_local = await local_session.execute(text(order_details_query_1))
-            local_data = [row.id for row in order_details_local.fetchall()]  # Extract IDs for use in NOT IN
-            print(len(local_data))
-
-
-
                         # Second query: Fetch detailed information for orderDetails not in local_data
             order_details_query_2 = """
             SELECT od.id
             from orderDetails AS od 
             INNER JOIN tickets AS t ON od.ticketId=t.id
             inner join orders o on od.orderId = o.id
-            WHERE t.eventId = 'a8498652-57ce-4d3e-8d42-1bcb5a246b2f' and o.status = "SUCCESS" AND od.id NOT IN :order_details_local
+            WHERE t.eventId = 'a8498652-57ce-4d3e-8d42-1bcb5a246b2f' and o.status = "SUCCESS" and t.name like :ticket_name
             """
 
+
             # Execute the second query with the list of IDs from the first query
-            local_order_details = await online_session.execute(text(order_details_query_2), {'order_details_local': local_data})
+            local_order_details = await online_session.execute(text(order_details_query_2), {'ticket_name': '%OTS%'})
             order_details_data = local_order_details.fetchall()
-            print(order_details_data)
+            order_details_data = [item[0] for item in order_details_data]
+            print(len(order_details_data))
 
-
-                        # Second query: Fetch detailed information for orderDetails not in local_data
+       
             order_details_query_3 = """
-            SELECT od.id AS orderDetailId, od.orderId, od.ticketId, od.quantity, od.name, od.email, 
-                od.birthDate, od.phoneNumber, od.gender, od.address, od.socialMedia, od.location, 
-                od.commiteeName, o.status, o.customerId, o.eventId, o.createdAt AS orderCreatedAt, 
-                o.updatedAt AS orderUpdatedAt, c.id AS customerId, c.name AS customerName, 
-                c.email AS customerEmail, c.gender AS customerGender, c.phoneNumber AS customerPhone, 
-                c.createdAt AS customerCreatedAt, c.updatedAt AS customerUpdatedAt, c.birthDate AS customerBirthDate, 
-                tv.id AS TicketVerificationId, tv.hash, tv.isScanned, tv.updatedAt AS verifiedAt
-            FROM orderDetails AS od
-            INNER JOIN orders AS o ON od.orderId = o.id
-            left JOIN customers AS c ON o.customerId = c.id
-            INNER JOIN TicketVerification AS tv ON od.id = tv.orderDetailId
-            WHERE od.id IN :order_details_local and o.eventId = 'a8498652-57ce-4d3e-8d42-1bcb5a246b2f' 
+                SELECT od.id AS orderDetailId, od.orderId, od.ticketId, od.quantity, od.name, od.email, 
+                    od.birthDate, od.phoneNumber, od.gender, od.address, od.socialMedia, od.location, 
+                    od.commiteeName, o.status, o.customerId, o.eventId, o.createdAt AS orderCreatedAt, 
+                    o.updatedAt AS orderUpdatedAt, c.id AS customerId, c.name AS customerName, 
+                    c.email AS customerEmail, c.gender AS customerGender, c.phoneNumber AS customerPhone, 
+                    c.createdAt AS customerCreatedAt, c.updatedAt AS customerUpdatedAt, c.birthDate AS customerBirthDate, 
+                    tv.id AS TicketVerificationId, tv.hash, tv.isScanned, tv.updatedAt AS verifiedAt
+                FROM orderDetails AS od
+                INNER JOIN orders AS o ON od.orderId = o.id
+                LEFT JOIN customers AS c ON o.customerId = c.id
+                INNER JOIN tickets AS t ON od.ticketId = t.id  -- Tambahkan join ke tabel tickets
+                INNER JOIN TicketVerification AS tv ON od.id = tv.orderDetailId
+                WHERE od.id NOT IN :online_data 
+                AND o.eventId = 'a8498652-57ce-4d3e-8d42-1bcb5a246b2f' 
+                AND t.name LIKE :ticket_name
             """
 
-            # Execute the second query with the list of IDs from the first query
-            local_order_details3 = await online_session.execute(text(order_details_query_3), {'order_details_local': order_details_data})
+            # Persiapkan parameter
+            order_details_data_tuple = tuple(order_details_data) if order_details_data else ('',)  # Pastikan ini adalah tuple, bahkan jika kosong
+            ticket_name_param = "%OTS%"  # Tambahkan wildcard langsung di parameter
+
+            # Eksekusi query
+            local_order_details3 = await local_session.execute(
+                text(order_details_query_3),
+                {"online_data": order_details_data_tuple, "ticket_name": ticket_name_param}
+            )
             order_details_data3 = local_order_details3.fetchall()
+            print(len(order_details_data3))
 
 
-
-            # Sinkronisasi data orderDetails dan relasi terkait ke online_session
-            print(order_details_data3)
             for row in order_details_data3:
                 # Sinkronisasi data customer
                 if row['customerId']:
