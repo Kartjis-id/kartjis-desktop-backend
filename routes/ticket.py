@@ -18,6 +18,7 @@ ticket = APIRouter()
 
 websocket_clients = []
 
+
 @ticket.post("/rfid")
 async def receive_rfid(request: Request):
     body = await request.json()
@@ -37,6 +38,8 @@ async def receive_rfid(request: Request):
         return JSONResponse(status_code=500, content={"data": None, "message": str(e)})
 
 # Fungsi untuk broadcast data ke semua klien WebSocket yang terhubung
+
+
 async def broadcast(data):
     for client in websocket_clients:
         try:
@@ -45,6 +48,8 @@ async def broadcast(data):
             websocket_clients.remove(client)
 
 # Endpoint WebSocket untuk mengelola koneksi WebSocket
+
+
 @ticket.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
@@ -54,6 +59,7 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.receive_text()
     except WebSocketDisconnect:
         websocket_clients.remove(websocket)
+
 
 @ticket.get('/api/tickets')
 async def read_data(response: Response):
@@ -66,7 +72,7 @@ async def read_data(response: Response):
             INNER JOIN orderDetails AS od ON tv.orderDetailId=od.id
             INNER JOIN tickets AS t ON od.ticketId=t.id
             inner join orders o on od.orderId = o.id
-            WHERE t.eventId = 'a8498652-57ce-4d3e-8d42-1bcb5a246b2f' and o.status = "SUCCESS"
+            WHERE t.eventId = '40717427-a0e5-436e-8900-2eb384509221' and o.status = "SUCCESS"
             order by od.NAME
             """
             result_proxy = await conn.execute(text(query))
@@ -102,7 +108,7 @@ async def update_verification2(hash: str):
                 INNER JOIN orderDetails AS od ON tv.orderDetailId = od.id
                 INNER JOIN tickets AS t ON od.ticketId = t.id
                 inner join orders o on od.orderId = o.id
-                WHERE tv.HASH = :hash AND t.eventId = 'a8498652-57ce-4d3e-8d42-1bcb5a246b2f' and o.status = "SUCCESS"  
+                WHERE tv.HASH = :hash AND t.eventId = '40717427-a0e5-436e-8900-2eb384509221' and o.status = "SUCCESS"  
             """
 
             check_result = await conn.execute(text(check_query), {"hash": hash})
@@ -113,7 +119,8 @@ async def update_verification2(hash: str):
                     status_code=404, detail="Ticket not found"
                 )
 
-            verification_status = row[0]  # Mengambil nilai pertama dari baris hasil query
+            # Mengambil nilai pertama dari baris hasil query
+            verification_status = row[0]
             ticket_info = row[1:]
 
             get_num_query = """
@@ -134,14 +141,13 @@ async def update_verification2(hash: str):
 
             is_verified = 1 if int(verification_status) == 0 else 0
 
-
             # Update verification status based on isVerify parameter
             query_update = """
                 UPDATE TicketVerification AS tv
                 INNER JOIN orderDetails AS od ON tv.orderDetailId = od.id
                 INNER JOIN tickets AS t ON od.ticketId = t.id
                 SET tv.isScanned = :is_verified, tv.updatedAt = :current_datetime
-                WHERE tv.HASH = :hash AND t.eventId = 'a8498652-57ce-4d3e-8d42-1bcb5a246b2f' 
+                WHERE tv.HASH = :hash AND t.eventId = '40717427-a0e5-436e-8900-2eb384509221' 
             """
 
             current_datetime = datetime.now()
@@ -162,11 +168,11 @@ async def update_verification2(hash: str):
                     "customerName": ticket_info[0],
                     "customerEmail": ticket_info[1],
                     "invoiceId": ticket_info[2],
-                    "verifiedAt" : current_datetime.isoformat(),
+                    "verifiedAt": current_datetime.isoformat(),
                     "ticketType": ticket_info[4],
-                    "isVerified" : int(verification_status),
-                    "hash" :  ticket_info[3],
-                    "ticketNum" : ticket_num
+                    "isVerified": int(verification_status),
+                    "hash":  ticket_info[3],
+                    "ticketNum": ticket_num
                 }
             }
 
@@ -180,6 +186,8 @@ async def update_verification2(hash: str):
             "error": str(e),
             "ticket": {}  # Empty ticket data in case of error
         }
+
+
 @ticket.put('/api/tickets/{hash}/verification')
 async def update_verification(hash: str, request: Request, response: Response):
     try:
@@ -195,7 +203,7 @@ async def update_verification(hash: str, request: Request, response: Response):
                 INNER JOIN orderDetails AS od ON tv.orderDetailId = od.id
                 INNER JOIN tickets AS t ON od.ticketId = t.id
                 INNER JOIN orders o ON od.orderId = o.id
-                WHERE tv.HASH = :hash AND t.eventId = 'a8498652-57ce-4d3e-8d42-1bcb5a246b2f' AND o.status = "SUCCESS"
+                WHERE tv.HASH = :hash AND t.eventId = '40717427-a0e5-436e-8900-2eb384509221' AND o.status = "SUCCESS"
             """
 
             check_result = await conn.execute(text(check_query), {"hash": hash})
@@ -206,8 +214,9 @@ async def update_verification(hash: str, request: Request, response: Response):
                     status_code=404, detail="Ticket not found"
                 )
 
-            verification_status = row[0]  # Mengambil nilai isScanned dari hasil query
-            ticket_info = row[1:]
+            # Mengambil nilai isScanned dari hasil query
+            verification_status = row[0]
+            ticket_info = row
 
             # Jika isVerify True dan tiket sudah diverifikasi, kembalikan error 400
             if isVerify and verification_status:
@@ -216,13 +225,14 @@ async def update_verification(hash: str, request: Request, response: Response):
                     "success": False,
                     "error": "Ticket already verified",
                     "ticket": {
-                        "customerName": ticket_info[0],
-                        "customerEmail": ticket_info[1],
-                        "invoiceId": ticket_info[2],
-                        "verifiedAt": row[7],  # Menggunakan updatedAt dari data sebelumnya
-                        "ticketType": ticket_info[4],
+                        "customerName": ticket_info[1],
+                        "customerEmail": ticket_info[2],
+                        "invoiceId": ticket_info[3],
+                        # Menggunakan updatedAt dari data sebelumnya
+                        # "verifiedAt": ,
+                        "ticketType": ticket_info[5],
                         "isVerified": int(verification_status),
-                        "hash": ticket_info[3],
+                        "hash": ticket_info[4],
                         "ticketNum": 1  # Asumsikan ticketNum tetap sama, bisa disesuaikan sesuai logika
                     }
                 }
@@ -240,7 +250,7 @@ async def update_verification(hash: str, request: Request, response: Response):
                 WHERE od.orderId = :orderId;
             """
 
-            temp = await conn.execute(text(get_num_query), {"orderId": ticket_info[5]})
+            temp = await conn.execute(text(get_num_query), {"orderId": ticket_info[6]})
             list_data = temp.fetchall()
             ticket_num = 1
 
@@ -255,7 +265,7 @@ async def update_verification(hash: str, request: Request, response: Response):
                 INNER JOIN orderDetails AS od ON tv.orderDetailId = od.id
                 INNER JOIN tickets AS t ON od.ticketId = t.id
                 SET tv.isScanned = :is_verified, tv.updatedAt = :current_datetime
-                WHERE tv.HASH = :hash AND t.eventId = 'a8498652-57ce-4d3e-8d42-1bcb5a246b2f'
+                WHERE tv.HASH = :hash AND t.eventId = '40717427-a0e5-436e-8900-2eb384509221'
             """
 
             current_datetime = datetime.now()
@@ -267,13 +277,13 @@ async def update_verification(hash: str, request: Request, response: Response):
                 "success": True,
                 "message": "Success verify ticket" if isVerify else "Success unverify ticket",
                 "ticket": {
-                    "customerName": ticket_info[0],
-                    "customerEmail": ticket_info[1],
-                    "invoiceId": ticket_info[2],
+                    "customerName": ticket_info[1],
+                    "customerEmail": ticket_info[2],
+                    "invoiceId": ticket_info[3],
                     "verifiedAt": current_datetime if isVerify else None,
-                    "ticketType": ticket_info[4],
+                    "ticketType": ticket_info[5],
                     "isVerified": is_verified,
-                    "hash": ticket_info[3],
+                    "hash": ticket_info[4],
                     "ticketNum": ticket_num
                 }
             }
@@ -283,13 +293,14 @@ async def update_verification(hash: str, request: Request, response: Response):
     except HTTPException as http_error:
         raise http_error  # Re-raise HTTPException to return the defined HTTP error response
     except Exception as e:
+        print(e)
         response.status_code = 500  # Internal Server Error
         return {
             "success": False,
             "error": str(e),
             "ticket": {}  # Empty ticket data in case of error
         }
-    
+
 
 @ticket.get('/api/outlier')
 async def read_data(response: Response):
@@ -304,7 +315,7 @@ async def read_data(response: Response):
                 FROM orders o
                 JOIN orderDetails od ON od.orderId = o.id
                 JOIN events e ON e.id = o.eventId
-                WHERE o.eventId = "a8498652-57ce-4d3e-8d42-1bcb5a246b2f"
+                WHERE o.eventId = "40717427-a0e5-436e-8900-2eb384509221"
                 GROUP BY od.orderId
                 HAVING COUNT(DISTINCT od.email) > 1
             );
@@ -322,14 +333,14 @@ async def read_data(response: Response):
             "success": False,
             "error": str(e),
         }
-    
-
-
 
 
 # Sessionmaker for local and online databases
-LocalSession = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
-OnlineSession = sessionmaker(online_engine, expire_on_commit=False, class_=AsyncSession)
+LocalSession = sessionmaker(
+    engine, expire_on_commit=False, class_=AsyncSession)
+OnlineSession = sessionmaker(
+    online_engine, expire_on_commit=False, class_=AsyncSession)
+
 
 @ticket.post('/api/sinkron')
 async def sync_data(response: Response):
@@ -337,9 +348,8 @@ async def sync_data(response: Response):
         async with LocalSession() as local_session, OnlineSession() as online_session:
             # Step 1: Get new data from online DB (orders with status 'SUCCESS' and the given eventId)
 
-
             query2 = '''
-                select id, name, price, eventId, stock, createdAt, updatedAt, adminFee from tickets where eventId = 'a8498652-57ce-4d3e-8d42-1bcb5a246b2f';
+                select id, name, price, eventId, stock, createdAt, updatedAt, adminFee from tickets where eventId = '40717427-a0e5-436e-8900-2eb384509221';
             '''
 
             online_result2 = await online_session.execute(text(query2))
@@ -360,13 +370,11 @@ async def sync_data(response: Response):
                         'name': row['name'],
                         'price': row['price'],
                         'eventId': row['eventId'],
-                        'stock':row['stock'],
+                        'stock': row['stock'],
                         'createdAt': row['createdAt'],
                         'updatedAt': row['updatedAt'],
                         'adminFee': row['adminFee'],
                     })
-
-
 
             online_query = """
             SELECT o.id AS orderId, o.status, o.customerId, o.eventId, o.createdAt, o.updatedAt,
@@ -378,7 +386,7 @@ async def sync_data(response: Response):
             INNER JOIN orderDetails AS od ON o.id = od.orderId
             INNER JOIN TicketVerification AS tv ON od.id = tv.orderDetailId
             LEFT JOIN customers AS c ON o.customerId = c.id
-            WHERE o.eventId = 'a8498652-57ce-4d3e-8d42-1bcb5a246b2f' 
+            WHERE o.eventId = '40717427-a0e5-436e-8900-2eb384509221' 
             """
             online_result = await online_session.execute(text(online_query))
             online_data = online_result.fetchall()
@@ -484,7 +492,8 @@ async def sync_data(response: Response):
                         'isScanned': row['isScanned'],
                         'verifiedAt': row['verifiedAt'],
                     })
-                    print(f"Inserted TicketVerification: {row['TicketVerificationId']}")
+                    print(f"Inserted TicketVerification: {
+                          row['TicketVerificationId']}")
 
             # Step 1: Fetch all TicketVerification IDs with isScanned = True in the local data
             order_details_query_2 = '''
@@ -492,12 +501,13 @@ async def sync_data(response: Response):
             FROM orderDetails od 
             JOIN orders o ON o.id = od.orderId
             JOIN TicketVerification tv ON tv.orderDetailId = od.id
-            WHERE o.eventId = 'a8498652-57ce-4d3e-8d42-1bcb5a246b2f' AND tv.isScanned = TRUE
+            WHERE o.eventId = '40717427-a0e5-436e-8900-2eb384509221' AND tv.isScanned = TRUE
             '''
 
             # Execute the query to fetch the local TicketVerification IDs
             local_ticket_verifications = await online_session.execute(text(order_details_query_2))
-            local_verified_ids = [row.id for row in local_ticket_verifications.fetchall()]
+            local_verified_ids = [
+                row.id for row in local_ticket_verifications.fetchall()]
 
             # Step 2: Update TicketVerification records in the online database
             if local_verified_ids:  # Proceed only if there are IDs to update
@@ -516,7 +526,7 @@ async def sync_data(response: Response):
             print("Data synchronization completed successfully.")
 
         return {"success": True, "message": "Data synchronization completed."}
-    
+
     except Exception as e:
         print(f"Error occurred: {e}")
         await local_session.rollback()  # Rollback if there's an error
@@ -536,6 +546,7 @@ class TicketData(BaseModel):
 
 # Assume `engine` is already defined and connected to the database
 
+
 @ticket.post('/api/ots')
 async def create_tickets(tickets: List[TicketData], response: Response):
     async with engine.begin() as conn:
@@ -549,15 +560,17 @@ async def create_tickets(tickets: List[TicketData], response: Response):
                 current_time = datetime.utcnow()
 
                 result = await conn.execute(
-                    text("SELECT id FROM `tickets` WHERE `name` = :name and `eventId` = :eventId"),
-                    {"name": ticket.ticket_name, "eventId": "a8498652-57ce-4d3e-8d42-1bcb5a246b2f"}
+                    text(
+                        "SELECT id FROM `tickets` WHERE `name` = :name and `eventId` = :eventId"),
+                    {"name": ticket.ticket_name,
+                        "eventId": "40717427-a0e5-436e-8900-2eb384509221"}
                 )
                 existing_ticket = result.fetchone()
 
                 if existing_ticket:
                     ticket_id = existing_ticket[0]
                 else:
-                    
+
                     await conn.execute(
                         text("""
                             INSERT INTO `tickets` (`id`, `name`, `price`, `eventId`, `stock`, `createdAt`, `updatedAt`, `adminFee`)
@@ -567,7 +580,7 @@ async def create_tickets(tickets: List[TicketData], response: Response):
                             "id": ticket_id,
                             "name": ticket.ticket_name,
                             "price": 0,
-                            "eventId": "a8498652-57ce-4d3e-8d42-1bcb5a246b2f",
+                            "eventId": "40717427-a0e5-436e-8900-2eb384509221",
                             "stock": 100,
                             "createdAt": current_time,
                             "updatedAt": current_time,
@@ -602,7 +615,7 @@ async def create_tickets(tickets: List[TicketData], response: Response):
                         "createdAt": current_time,
                         "updatedAt": current_time,
                         "customerId": customer_id,
-                        "eventId": 'a8498652-57ce-4d3e-8d42-1bcb5a246b2f',
+                        "eventId": '40717427-a0e5-436e-8900-2eb384509221',
                     }
                 )
 
@@ -629,9 +642,10 @@ async def create_tickets(tickets: List[TicketData], response: Response):
                 )
 
                 # Menggabungkan nilai email, orderDetailId, dan createdAt
-                random_number = random.randint(1000, 9999)  # Menghasilkan angka acak antara 1000 dan 9999
-                combined_string = f"{ticket.customer_email}{order_detail_id}{current_time}{random_number}"
-
+                # Menghasilkan angka acak antara 1000 dan 9999
+                random_number = random.randint(1000, 9999)
+                combined_string = f"{ticket.customer_email}{
+                    order_detail_id}{current_time}{random_number}"
 
                 # Menghasilkan hash MD5
                 hash_value = hashlib.md5(combined_string.encode()).hexdigest()
@@ -663,7 +677,6 @@ async def create_tickets(tickets: List[TicketData], response: Response):
             }
 
 
-
 @ticket.post('/api/backup')
 async def backup_data(response: Response):
     try:
@@ -673,11 +686,10 @@ async def backup_data(response: Response):
             query_tickets = '''
                 SELECT id, name, price, eventId, stock, createdAt, updatedAt, adminFee
                 FROM tickets 
-                WHERE eventId = 'a8498652-57ce-4d3e-8d42-1bcb5a246b2f';
+                WHERE eventId = '40717427-a0e5-436e-8900-2eb384509221';
             '''
             local_result_tickets = await local_session.execute(text(query_tickets))
             local_tickets_data = local_result_tickets.fetchall()
-
 
             # Sinkronisasi data tickets ke online_session
             for ticket in local_tickets_data:
@@ -701,15 +713,14 @@ async def backup_data(response: Response):
                         'adminFee': ticket['adminFee']
                     })
 
-                        # Second query: Fetch detailed information for orderDetails not in local_data
+                    # Second query: Fetch detailed information for orderDetails not in local_data
             order_details_query_2 = """
             SELECT od.id
             from orderDetails AS od 
             INNER JOIN tickets AS t ON od.ticketId=t.id
             inner join orders o on od.orderId = o.id
-            WHERE t.eventId = 'a8498652-57ce-4d3e-8d42-1bcb5a246b2f' and o.status = "SUCCESS" and (t.name like :ticket_name or t.name = 'Instansi')
+            WHERE t.eventId = '40717427-a0e5-436e-8900-2eb384509221' and o.status = "SUCCESS" and (t.name like :ticket_name or t.name = 'Instansi')
             """
-
 
             # Execute the second query with the list of IDs from the first query
             local_order_details = await online_session.execute(text(order_details_query_2), {'ticket_name': '%OTS%'})
@@ -717,7 +728,6 @@ async def backup_data(response: Response):
             order_details_data = [item[0] for item in order_details_data]
             print(len(order_details_data))
 
-       
             order_details_query_3 = """
                 SELECT od.id AS orderDetailId, od.orderId, od.ticketId, od.quantity, od.name, od.email, 
                     od.birthDate, od.phoneNumber, od.gender, od.address, od.socialMedia, od.location, 
@@ -732,29 +742,31 @@ async def backup_data(response: Response):
                 INNER JOIN tickets AS t ON od.ticketId = t.id  -- Tambahkan join ke tabel tickets
                 INNER JOIN TicketVerification AS tv ON od.id = tv.orderDetailId
                 WHERE od.id NOT IN :online_data 
-                AND o.eventId = 'a8498652-57ce-4d3e-8d42-1bcb5a246b2f' 
+                AND o.eventId = '40717427-a0e5-436e-8900-2eb384509221' 
                 AND (t.name like :ticket_name or t.name = 'Instansi')
             """
 
             # Persiapkan parameter
-            order_details_data_tuple = tuple(order_details_data) if order_details_data else ('',)  # Pastikan ini adalah tuple, bahkan jika kosong
+            order_details_data_tuple = tuple(order_details_data) if order_details_data else (
+                '',)  # Pastikan ini adalah tuple, bahkan jika kosong
             ticket_name_param = "%OTS%"  # Tambahkan wildcard langsung di parameter
 
             # Eksekusi query
             local_order_details3 = await local_session.execute(
                 text(order_details_query_3),
-                {"online_data": order_details_data_tuple, "ticket_name": ticket_name_param}
+                {"online_data": order_details_data_tuple,
+                    "ticket_name": ticket_name_param}
             )
             order_details_data3 = local_order_details3.fetchall()
             print(len(order_details_data3))
-
 
             for row in order_details_data3:
                 # Sinkronisasi data customer
                 if row['customerId']:
                     check_customer_query = "SELECT 1 FROM customers WHERE id = :customer_id"
                     customer_exists = await online_session.execute(
-                        text(check_customer_query), {'customer_id': row['customerId']}
+                        text(check_customer_query), {
+                            'customer_id': row['customerId']}
                     )
                     if not customer_exists.scalar():
                         insert_customer_query = """
@@ -818,7 +830,8 @@ async def backup_data(response: Response):
                 if row['TicketVerificationId']:
                     check_tv_query = "SELECT 1 FROM TicketVerification WHERE id = :tv_id"
                     tv_exists = await online_session.execute(
-                        text(check_tv_query), {'tv_id': row['TicketVerificationId']}
+                        text(check_tv_query), {
+                            'tv_id': row['TicketVerificationId']}
                     )
                     if not tv_exists.scalar():
                         insert_tv_query = """
@@ -833,19 +846,19 @@ async def backup_data(response: Response):
                             'updatedAt': row['verifiedAt']
                         })
 
-
            # Step 1: Fetch all TicketVerification IDs with isScanned = True in the local data
             order_details_query_2 = '''
             SELECT tv.id 
             FROM orderDetails od 
             JOIN orders o ON o.id = od.orderId
             JOIN TicketVerification tv ON tv.orderDetailId = od.id
-            WHERE o.eventId = 'a8498652-57ce-4d3e-8d42-1bcb5a246b2f' AND tv.isScanned = TRUE
+            WHERE o.eventId = '40717427-a0e5-436e-8900-2eb384509221' AND tv.isScanned = TRUE
             '''
 
             # Execute the query to fetch the local TicketVerification IDs
             local_ticket_verifications = await local_session.execute(text(order_details_query_2))
-            local_verified_ids = [row.id for row in local_ticket_verifications.fetchall()]
+            local_verified_ids = [
+                row.id for row in local_ticket_verifications.fetchall()]
 
             # Step 2: Update TicketVerification records in the online database
             if local_verified_ids:  # Proceed only if there are IDs to update
@@ -870,10 +883,5 @@ async def backup_data(response: Response):
         return {"success": False, "error": str(e)}
 
 
-
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=3000, reload=True)
-
-
-
-
