@@ -72,7 +72,7 @@ async def read_data(response: Response):
             INNER JOIN orderDetails AS od ON tv.orderDetailId=od.id
             INNER JOIN tickets AS t ON od.ticketId=t.id
             inner join orders o on od.orderId = o.id
-            WHERE t.eventId = '40717427-a0e5-436e-8900-2eb384509221' and o.status = "SUCCESS"
+            WHERE t.eventId = '48b16732-6bd6-477b-b8b0-22dc0e884769' and o.status = "SUCCESS"
             order by od.NAME
             """
             result_proxy = await conn.execute(text(query))
@@ -108,7 +108,7 @@ async def update_verification2(hash: str):
                 INNER JOIN orderDetails AS od ON tv.orderDetailId = od.id
                 INNER JOIN tickets AS t ON od.ticketId = t.id
                 inner join orders o on od.orderId = o.id
-                WHERE tv.HASH = :hash AND t.eventId = '40717427-a0e5-436e-8900-2eb384509221' and o.status = "SUCCESS"  
+                WHERE tv.HASH = :hash AND t.eventId = '48b16732-6bd6-477b-b8b0-22dc0e884769' and o.status = "SUCCESS"  
             """
 
             check_result = await conn.execute(text(check_query), {"hash": hash})
@@ -147,7 +147,7 @@ async def update_verification2(hash: str):
                 INNER JOIN orderDetails AS od ON tv.orderDetailId = od.id
                 INNER JOIN tickets AS t ON od.ticketId = t.id
                 SET tv.isScanned = :is_verified, tv.updatedAt = :current_datetime
-                WHERE tv.HASH = :hash AND t.eventId = '40717427-a0e5-436e-8900-2eb384509221' 
+                WHERE tv.HASH = :hash AND t.eventId = '48b16732-6bd6-477b-b8b0-22dc0e884769' 
             """
 
             current_datetime = datetime.now()
@@ -203,7 +203,7 @@ async def update_verification(hash: str, request: Request, response: Response):
                 INNER JOIN orderDetails AS od ON tv.orderDetailId = od.id
                 INNER JOIN tickets AS t ON od.ticketId = t.id
                 INNER JOIN orders o ON od.orderId = o.id
-                WHERE tv.HASH = :hash AND t.eventId = '40717427-a0e5-436e-8900-2eb384509221' AND o.status = "SUCCESS"
+                WHERE tv.HASH = :hash AND t.eventId = '48b16732-6bd6-477b-b8b0-22dc0e884769' AND o.status = "SUCCESS"
             """
 
             check_result = await conn.execute(text(check_query), {"hash": hash})
@@ -265,7 +265,7 @@ async def update_verification(hash: str, request: Request, response: Response):
                 INNER JOIN orderDetails AS od ON tv.orderDetailId = od.id
                 INNER JOIN tickets AS t ON od.ticketId = t.id
                 SET tv.isScanned = :is_verified, tv.updatedAt = :current_datetime
-                WHERE tv.HASH = :hash AND t.eventId = '40717427-a0e5-436e-8900-2eb384509221'
+                WHERE tv.HASH = :hash AND t.eventId = '48b16732-6bd6-477b-b8b0-22dc0e884769'
             """
 
             current_datetime = datetime.now()
@@ -315,7 +315,7 @@ async def read_data(response: Response):
                 FROM orders o
                 JOIN orderDetails od ON od.orderId = o.id
                 JOIN events e ON e.id = o.eventId
-                WHERE o.eventId = "40717427-a0e5-436e-8900-2eb384509221"
+                WHERE o.eventId = "48b16732-6bd6-477b-b8b0-22dc0e884769"
                 GROUP BY od.orderId
                 HAVING COUNT(DISTINCT od.email) > 1
             );
@@ -349,7 +349,7 @@ async def sync_data(response: Response):
             # Step 1: Get new data from online DB (orders with status 'SUCCESS' and the given eventId)
 
             query2 = '''
-                select id, name, price, eventId, stock, createdAt, updatedAt, adminFee from tickets where eventId = '40717427-a0e5-436e-8900-2eb384509221';
+                select id, name, price, eventId, stock, createdAt, updatedAt, adminFee from tickets where eventId = '48b16732-6bd6-477b-b8b0-22dc0e884769';
             '''
 
             online_result2 = await online_session.execute(text(query2))
@@ -386,7 +386,7 @@ async def sync_data(response: Response):
             INNER JOIN orderDetails AS od ON o.id = od.orderId
             INNER JOIN TicketVerification AS tv ON od.id = tv.orderDetailId
             LEFT JOIN customers AS c ON o.customerId = c.id
-            WHERE o.eventId = '40717427-a0e5-436e-8900-2eb384509221' 
+            WHERE o.eventId = '48b16732-6bd6-477b-b8b0-22dc0e884769' 
             """
             online_result = await online_session.execute(text(online_query))
             online_data = online_result.fetchall()
@@ -501,7 +501,7 @@ async def sync_data(response: Response):
             FROM orderDetails od 
             JOIN orders o ON o.id = od.orderId
             JOIN TicketVerification tv ON tv.orderDetailId = od.id
-            WHERE o.eventId = '40717427-a0e5-436e-8900-2eb384509221' AND tv.isScanned = TRUE
+            WHERE o.eventId = '48b16732-6bd6-477b-b8b0-22dc0e884769' AND tv.isScanned = TRUE
             '''
 
             # Execute the query to fetch the local TicketVerification IDs
@@ -563,7 +563,7 @@ async def create_tickets(tickets: List[TicketData], response: Response):
                     text(
                         "SELECT id FROM `tickets` WHERE `name` = :name and `eventId` = :eventId"),
                     {"name": ticket.ticket_name,
-                        "eventId": "40717427-a0e5-436e-8900-2eb384509221"}
+                        "eventId": "48b16732-6bd6-477b-b8b0-22dc0e884769"}
                 )
                 existing_ticket = result.fetchone()
 
@@ -580,7 +580,7 @@ async def create_tickets(tickets: List[TicketData], response: Response):
                             "id": ticket_id,
                             "name": ticket.ticket_name,
                             "price": 0,
-                            "eventId": "40717427-a0e5-436e-8900-2eb384509221",
+                            "eventId": "48b16732-6bd6-477b-b8b0-22dc0e884769",
                             "stock": 100,
                             "createdAt": current_time,
                             "updatedAt": current_time,
@@ -615,7 +615,7 @@ async def create_tickets(tickets: List[TicketData], response: Response):
                         "createdAt": current_time,
                         "updatedAt": current_time,
                         "customerId": customer_id,
-                        "eventId": '40717427-a0e5-436e-8900-2eb384509221',
+                        "eventId": '48b16732-6bd6-477b-b8b0-22dc0e884769',
                     }
                 )
 
@@ -686,7 +686,7 @@ async def backup_data(response: Response):
             query_tickets = '''
                 SELECT id, name, price, eventId, stock, createdAt, updatedAt, adminFee
                 FROM tickets 
-                WHERE eventId = '40717427-a0e5-436e-8900-2eb384509221';
+                WHERE eventId = '48b16732-6bd6-477b-b8b0-22dc0e884769';
             '''
             local_result_tickets = await local_session.execute(text(query_tickets))
             local_tickets_data = local_result_tickets.fetchall()
@@ -719,7 +719,7 @@ async def backup_data(response: Response):
             from orderDetails AS od 
             INNER JOIN tickets AS t ON od.ticketId=t.id
             inner join orders o on od.orderId = o.id
-            WHERE t.eventId = '40717427-a0e5-436e-8900-2eb384509221' and o.status = "SUCCESS" and (t.name like :ticket_name or t.name = 'Instansi')
+            WHERE t.eventId = '48b16732-6bd6-477b-b8b0-22dc0e884769' and o.status = "SUCCESS" and (t.name like :ticket_name or t.name = 'Instansi')
             """
 
             # Execute the second query with the list of IDs from the first query
@@ -742,7 +742,7 @@ async def backup_data(response: Response):
                 INNER JOIN tickets AS t ON od.ticketId = t.id  -- Tambahkan join ke tabel tickets
                 INNER JOIN TicketVerification AS tv ON od.id = tv.orderDetailId
                 WHERE od.id NOT IN :online_data 
-                AND o.eventId = '40717427-a0e5-436e-8900-2eb384509221' 
+                AND o.eventId = '48b16732-6bd6-477b-b8b0-22dc0e884769' 
                 AND (t.name like :ticket_name or t.name = 'Instansi')
             """
 
@@ -852,7 +852,7 @@ async def backup_data(response: Response):
             FROM orderDetails od 
             JOIN orders o ON o.id = od.orderId
             JOIN TicketVerification tv ON tv.orderDetailId = od.id
-            WHERE o.eventId = '40717427-a0e5-436e-8900-2eb384509221' AND tv.isScanned = TRUE
+            WHERE o.eventId = '48b16732-6bd6-477b-b8b0-22dc0e884769' AND tv.isScanned = TRUE
             '''
 
             # Execute the query to fetch the local TicketVerification IDs
