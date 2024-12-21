@@ -61,34 +61,96 @@ async def websocket_endpoint(websocket: WebSocket):
         websocket_clients.remove(websocket)
 
 
-@ticket.get('/api/tickets')
-async def read_data(response: Response):
+@ticket.get('/api/ticketTypes')
+async def get_ticket_types(response: Response):
     try:
         async with engine.begin() as conn:
             query = """
+                SELECT DISTINCT name AS ticketType FROM tickets
+                WHERE eventId = '40717427-a0e5-436e-8900-2eb384509221'
+            """
+            result_proxy = await conn.execute(text(query))
+            data = result_proxy.fetchall()
+
+            ticket_types = [row['ticketType'] for row in data]
+
+        return ticket_types
+
+    except Exception as e:
+        print(e)
+        response.status_code = 500  # Internal Server Error
+        return {
+            "success": False,
+            "error": str(e),
+        }
+
+
+@ticket.get('/api/tickets')
+async def read_data(response: Response, query: dict = None):
+    try:
+        customer_name_query = query.get("query", "") if query else ""
+        ticket_type_query = query.get("ticketType", "") if query else ""
+
+        async with engine.begin() as conn:
+            base_query = """
             SELECT od.id AS invoiceId, tv.hash AS hash, tv.isScanned AS isVerified, od.NAME AS customerName,
-            od.email AS customerEmail, t.name AS ticketType, tv.updatedAt as verifiedAt
+            od.email AS customerEmail, t.name AS ticketType
             FROM TicketVerification AS tv
             INNER JOIN orderDetails AS od ON tv.orderDetailId=od.id
             INNER JOIN tickets AS t ON od.ticketId=t.id
             inner join orders o on od.orderId = o.id
             WHERE t.eventId = '40717427-a0e5-436e-8900-2eb384509221' and o.status = "SUCCESS"
-            order by od.NAME
             """
-            result_proxy = await conn.execute(text(query))
+
+            filters = []
+            if customer_name_query:
+                sanitized_query = customer_name_query.replace(
+                    "'", "''")
+                filters.append(
+                    f"(LOWER(od.NAME) LIKE LOWER('%{
+                        sanitized_query}%') OR LOWER(od.email) LIKE LOWER('%{sanitized_query}%'))"
+                )
+
+            if ticket_type_query:
+                filters.append(f"t.name LIKE '%{ticket_type_query}%'")
+
+            if filters:
+                base_query += " AND " + " AND ".join(filters)
+
+            base_query += " order by od.NAME"
+
+            result_proxy = await conn.execute(text(base_query))
             data = result_proxy.fetchall()
 
             formatted_data = []
+            ticket_counter = {}
+            ticket_counts = {}
+
             for row in data:
                 row_dict = dict(row)
-                if 'verifiedAt' in row_dict:
-                    row_dict['verifiedAt'] = row_dict['verifiedAt'].isoformat()
+                if 'updatedAt' in row_dict:
+                    row_dict['updatedAt'] = row_dict['updatedAt'].isoformat()
+
+                # Increment ticket number per orderId
+                order_id = row_dict['invoiceId']
+                if order_id not in ticket_counter:
+                    ticket_counter[order_id] = 1
+                else:
+                    ticket_counter[order_id] += 1
+
+                # Calculate total ticket count for the orderId
+                if order_id not in ticket_counts:
+                    ticket_counts[order_id] = len(
+                        [r for r in data if r['invoiceId'] == order_id])
+
+                row_dict['ticketNum'] = ticket_counter[order_id]
+                row_dict['ticketCount'] = ticket_counts[order_id]
+                # Convert isVerified to boolean
+                row_dict['isVerified'] = bool(row_dict['isVerified'])
                 formatted_data.append(row_dict)
 
-        return {
-            "success": True,
-            "data": formatted_data,
-        }
+        return formatted_data
+
     except Exception as e:
         print(e)
         response.status_code = 500  # Internal Server Error
