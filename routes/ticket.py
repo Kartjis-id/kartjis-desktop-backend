@@ -61,6 +61,84 @@ async def websocket_endpoint(websocket: WebSocket):
         websocket_clients.remove(websocket)
 
 
+@ticket.get('/api/events/{event_id}/master')
+async def read_data(event_id: str, response: Response):
+    try:
+        async with engine.begin() as conn:
+            # Optimized query with COUNT for ticketCount and ROW_NUMBER() for ticketNum
+            base_query = """
+            SELECT od.address as address, od.birthDate as birthDate,  
+            od.email AS email, od.gender as gender, od.id as id, 
+            od.location as location, od.NAME AS name, o.id as orderId, od.phoneNumber as phoneNumber, 
+            od.socialMedia as socialMedia, 
+            t.id as ticketId, t.name as ticketName, t.price as ticketPrice,
+            o.createdAt as orderCreatedAt,
+            tv.hash AS hash, tv.isScanned AS isVerified, tv.id as tvId,
+            ROW_NUMBER() OVER (PARTITION BY od.orderId ORDER BY od.NAME) AS ticketNum,
+            COUNT(*) OVER (PARTITION BY od.orderId) AS ticketCount
+            FROM TicketVerification AS tv
+            INNER JOIN orderDetails AS od ON tv.orderDetailId=od.id
+            INNER JOIN tickets AS t ON od.ticketId=t.id
+            INNER JOIN orders o ON od.orderId = o.id
+            WHERE t.eventId = :event_id and o.status = "SUCCESS"
+            ORDER BY od.NAME
+            """
+
+            # Execute the query
+            result_proxy = await conn.execute(text(base_query), {'event_id': event_id})
+            data = result_proxy.fetchall()
+
+            formatted_data = []
+
+            for row in data:
+                row_dict = dict(row)
+
+                # Mapping the fields to the required structure
+                row_dict['ticket'] = {
+                    'id': row_dict['ticketId'],
+                    'name': row_dict['ticketName'],
+                    'price': row_dict['ticketPrice']
+                }
+                row_dict['order'] = {
+                    'id': row_dict['orderId'],
+                    'createdAt': row_dict['orderCreatedAt']
+                }
+                row_dict['ticketVerification'] = {
+                    'isScanned': bool(row_dict['isVerified']),
+                    'hash': row_dict['hash'],
+                    'id': row_dict['tvId']
+                }
+
+                # Add ticketNum and ticketCount directly from SQL
+                row_dict['ticketNum'] = row_dict['ticketNum']
+                row_dict['ticketCount'] = row_dict['ticketCount']
+
+                # Clean up the data (remove the original fields that are no longer needed)
+                del row_dict['ticketName']
+                del row_dict['ticketPrice']
+                del row_dict['ticketId']
+                del row_dict['orderCreatedAt']
+                del row_dict['isVerified']
+                del row_dict['hash']
+                del row_dict['tvId']
+
+                # Append the updated row to the formatted_data list
+                formatted_data.append(row_dict)
+
+        return {
+            "status": "",
+            "data": formatted_data
+        }
+
+    except Exception as e:
+        print(e)
+        response.status_code = 500  # Internal Server Error
+        return {
+            "success": False,
+            "error": str(e),
+        }
+
+
 @ticket.get('/api/tickets')
 async def read_data(response: Response):
     try:
