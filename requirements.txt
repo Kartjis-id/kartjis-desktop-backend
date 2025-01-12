@@ -15,3 +15,4 @@ websockets==11.0.3
 fastapi==0.99.0
 uvicorn==0.23.0
 pydantic>=1.7.4,<2.0.0
+pytz==2023.3  # Versi terbaru (cek di pip jika perlu)
