@@ -18,6 +18,8 @@ db1 = 'kartjis_old_db'
 db2 = 'event_commitee_kartjis'
 
 # LOGIN
+
+
 class LoginData(BaseModel):
     username: str
     password: str
@@ -295,10 +297,20 @@ async def get_event_organizers(eventId: str, response: Response):
         async with online_engine.begin() as conn:
             # Query untuk mendapatkan semua event organizers berdasarkan eventId
             fetch_query = f"""
-            SELECT eo.username, eo.name, eo.email, eo.isAdmin
+            SELECT
+                eo.id as id,
+                eo.username as username,
+                eo.name as name,
+                eo.email as email,
+                eo.isAdmin as isAdmin,
+                COUNT(tv.id) AS totalVerification
             FROM {db2}.users eo
+            left JOIN {db1}.TicketVerification tv
+                ON tv.verifiedBy = eo.id
             WHERE eo.eventId = :eventId
-            """
+            GROUP BY eo.username, eo.name, eo.email, eo.isAdmin
+        """
+
             result = await conn.execute(text(fetch_query), {"eventId": eventId})
             event_organizers = result.fetchall()
 
@@ -310,10 +322,12 @@ async def get_event_organizers(eventId: str, response: Response):
             # Mengubah hasil query menjadi list of dictionaries
             organizers_list = [
                 {
+                    "id": organizer.id,
                     "username": organizer.username,
                     "name": organizer.name,
                     "email": organizer.email,  # Properti phone ditambahkan
                     "isAdmin": organizer.isAdmin,
+                    "totalVerification": organizer.totalVerification,
                 }
                 for organizer in event_organizers
             ]
@@ -385,7 +399,7 @@ async def update_ticket(ticket_id: str, ticket_data: TicketBase, response: Respo
                 "name": ticket_data.name,
                 "price": ticket_data.price,
                 "stock": ticket_data.stock,
-                "ticket_id":ticket_id,
+                "ticket_id": ticket_id,
             }
 
             result = await conn.execute(text(update_query), params)
@@ -523,7 +537,8 @@ async def ots2(request: dict, event_id: str, response: Response):
 
                 result = await conn.execute(
                     text(
-                        f"SELECT id FROM {db1}.tickets WHERE `name` = :name and `eventId` = :eventId"
+                        f"SELECT id FROM {
+                            db1}.tickets WHERE `name` = :name and `eventId` = :eventId"
                     ),
                     {"name": ticket["ticket_name"], "eventId": event_id},
                 )
@@ -635,8 +650,10 @@ async def ots2(request: dict, event_id: str, response: Response):
                 "success": False,
                 "error": str(e),
             }
-        
-#Bom verification 
+
+# Bom verification
+
+
 @ticket.put('/api/events/{event_id}/tickets/verifications')
 async def bulk_update_ticket_verifications(event_id: str, request: Request, response: Response):
     try:
@@ -699,7 +716,6 @@ async def bulk_update_ticket_verifications(event_id: str, request: Request, resp
             "message": "An error occurred while processing the request.",
             "error": str(e),
         }
-
 
 
 if __name__ == "__main__":
