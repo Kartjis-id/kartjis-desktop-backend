@@ -14,8 +14,8 @@ import bcrypt
 ticket = APIRouter()
 
 
-db1 = 'kartjis_old_db'
-db2 = 'event_commitee_kartjis'
+db1 = 'kartjis2'
+db2 = 'users'
 
 # LOGIN
 
@@ -232,7 +232,7 @@ async def delete_order(id: str, response: Response):
             if result.rowcount == 0:
                 raise HTTPException(status_code=404, detail="Order not found")
 
-        return {"status": "SUCCESS", "message": f"Order with ID {id} deleted successfully"}
+        return {"status": "SUCCESS", "message": f"Order with ID {id} deleted successfully", "data": True, }
 
     except HTTPException as e:
         raise e
@@ -377,7 +377,7 @@ async def create_ticket(ticket_data: TicketBase, response: Response):
 
             await conn.execute(text(insert_query), params)
 
-        return {"status": "SUCCESS", "message": "Ticket created successfully"}
+        return {"status": "SUCCESS", "message": "Ticket created successfully", "data": True}
     except Exception as e:
         print(e)
         response.status_code = 500  # Internal Server Error
@@ -461,11 +461,14 @@ async def update_verification(hash: str, event_id: str, request: Request, respon
             row = check_result.fetchone()
 
             if not row:
-                response.status_code = 404  # Not Found
+                # response.status_code = 404  # Not Found
                 return {
-                    "success": False,
-                    "statusCode": 404,
-                    "message": "Kartjis tidak ditemukan.",
+                    "status": "SUCCESS",
+                    "data": {
+                        "success": False,
+                        "statusCode": 404,
+                        "message": "Kartjis tidak ditemukan.",
+                    }
                 }
 
             # Ambil status verifikasi saat ini
@@ -473,11 +476,15 @@ async def update_verification(hash: str, event_id: str, request: Request, respon
 
             # Cek kondisi untuk isVerify
             if is_verify and verification_status:
-                response.status_code = 400  # Bad Request
+                # response.status_code = 400  # Not Found
+
                 return {
-                    "success": False,
-                    "statusCode": 400,
-                    "message": "Kartjis sudah diverifikasi.",
+                    "status": "SUCCESS",
+                    "data": {
+                        "success": False,
+                        "statusCode": 400,
+                        "message": "Kartjis sudah diverifikasi.",
+                    }
                 }
 
             # Update status verifikasi
@@ -502,9 +509,12 @@ async def update_verification(hash: str, event_id: str, request: Request, respon
 
         # Response sukses
         return {
-            "success": True,
-            "statusCode": 200 if is_verify else 222,
-            "message": "Berhasil memverifikasi Kartjis." if is_verify else "Berhasil membatalkan verifikasi Kartjis.",
+            "status": "SUCCESS",
+            "data": {
+                "success": True,
+                "statusCode": 200 if is_verify else 222,
+                "message": "Berhasil memverifikasi Kartjis." if is_verify else "Berhasil membatalkan verifikasi Kartjis.",
+            }
         }
 
     except HTTPException as http_error:
@@ -641,6 +651,7 @@ async def ots2(request: dict, event_id: str, response: Response):
             return {
                 "success": True,
                 "message": "Tickets successfully created.",
+                "data": True,
             }
 
         except Exception as e:
@@ -651,7 +662,7 @@ async def ots2(request: dict, event_id: str, response: Response):
                 "error": str(e),
             }
 
-# Bom verification
+# Bom create
 
 
 @ticket.put('/api/events/{event_id}/tickets/verifications')
