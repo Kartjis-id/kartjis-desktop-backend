@@ -748,21 +748,26 @@ async def sync_ots(request: dict, event_id: str, response: Response):
                 if existing_ticket:
                     ticket_id = existing_ticket[0]
                 else:
-                    await conn.execute(
-                        text(f"""
-                            INSERT INTO {db1}.tickets (`id`, `name`, `price`, `eventId`, `stock`, `createdAt`, `updatedAt`, `adminFee`)
-                            VALUES (:id, :name, :price, :eventId, :stock, :createdAt, :updatedAt, 0)
-                        """),
-                        {
-                            "id": ticket_id,
-                            "name": 'OTS',
-                            "price": 0,
-                            "eventId": event_id,
-                            "stock": 100,
-                            "createdAt": current_time,
-                            "updatedAt": current_time,
-                        },
-                    )
+                    return {
+                        "success": False,
+                        "error": str('ticket id required'),
+                    }
+                # else:
+                #     await conn.execute(
+                #         text(f"""
+                #             INSERT INTO {db1}.tickets (`id`, `name`, `price`, `eventId`, `stock`, `createdAt`, `updatedAt`, `adminFee`)
+                #             VALUES (:id, :name, :price, :eventId, :stock, :createdAt, :updatedAt, 0)
+                #         """),
+                #         {
+                #             "id": ticket_id,
+                #             "name": 'OTS',
+                #             "price": 0,
+                #             "eventId": event_id,
+                #             "stock": 100,
+                #             "createdAt": current_time,
+                #             "updatedAt": current_time,
+                #         },
+                #     )
 
                 # Insert ke tabel `customers`
                 await conn.execute(
