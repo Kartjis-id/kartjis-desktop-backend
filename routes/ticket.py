@@ -1,4 +1,5 @@
 from fastapi import HTTPException, Request, Response
+import jwt
 import hashlib
 import pytz
 import random
@@ -7,9 +8,16 @@ from fastapi import APIRouter, Query, Response, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import text
 from config.db import online_engine
-from datetime import datetime
+from datetime import datetime, timedelta
 import uvicorn
 import bcrypt
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import Security, Depends
+
+security = HTTPBearer()
+SECRET_KEY = "a_very_secret_key_1234567890!@#$%^&*()"
+ALGORITHM = "HS256"
+
 
 ticket = APIRouter()
 
@@ -24,12 +32,34 @@ class LoginData(BaseModel):
     username: str
     password: str
 
+# Fungsi untuk membuat token JWT
 
-@ticket.post('/api/login')
+
+def create_token(user_data: dict):
+    expiration = datetime.utcnow() + timedelta(hours=1)
+    payload = {**user_data, "exp": expiration}
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+# Fungsi untuk mengambil user dari token
+
+
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Security(security)):
+    try:
+        token = credentials.credentials
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+# Endpoint login yang menghasilkan token
+
+
+@ticket.post('/api/users/login')
 async def login(login_data: LoginData, response: Response):
     try:
         async with online_engine.begin() as conn:
-            # Fetch user by username
             fetch_query = f"""
             SELECT id, username, password, isAdmin, eventId, name, email
             FROM {db2}.users WHERE username = :username
@@ -40,23 +70,27 @@ async def login(login_data: LoginData, response: Response):
             if not user:
                 raise HTTPException(status_code=404, detail="User not found")
 
-            # Check password
-            stored_password = user.password
-            if not bcrypt.checkpw(login_data.password.encode('utf-8'), stored_password.encode('utf-8')):
+            if not bcrypt.checkpw(login_data.password.encode('utf-8'), user.password.encode('utf-8')):
                 raise HTTPException(
                     status_code=401, detail="Invalid credentials")
 
-            # Successful login response
+            # Buat token JWT yang menyimpan eventId
+            token = create_token({
+                "username": user.username,
+                "eventId": user.eventId
+            })
+
             return {
                 "status": "SUCCESS",
                 "message": "Login successful",
                 "data": {
-                    "id": user.id,
+                    "userId": user.id,
                     "username": user.username,
-                    "isAdmin": user.isAdmin,
+                    "isAdmin": user.isAdmin == 1,
                     "eventId": user.eventId,
                     "name": user.name,
                     "email": user.email,
+                    "token": token
                 }
             }
     except HTTPException as e:
@@ -69,15 +103,16 @@ async def login(login_data: LoginData, response: Response):
 
 
 # GEt ORDERS
-@ticket.get('/api/events/{event_id}/orders')
-async def read_data2(
-    event_id: str,
+@ticket.get('/api/events/orders')
+async def read_orders(
     response: Response,
-    search: str = Query(default=None, description="Search by name or email")
+    search: str = Query(default=None, description="Search by name or email"),
+    user: dict = Depends(get_current_user)  # Ambil user dari token
 ):
     try:
+        event_id = user["eventId"]  # Ambil eventId dari token
+
         async with online_engine.begin() as conn:
-            # Query utama dari database `kartjis_old_db`
             base_query = f"""
             SELECT od.address as address, od.birthDate as birthDate,
             od.email AS email, od.gender as gender, od.id as id,
@@ -93,7 +128,7 @@ async def read_data2(
             INNER JOIN {db1}.orderDetails AS od ON tv.orderDetailId=od.id
             INNER JOIN {db1}.tickets AS t ON od.ticketId=t.id
             INNER JOIN {db1}.orders o ON od.orderId = o.id
-            LEFT JOIN {db2}.users u ON tv.verifiedBy = u.id  -- Access from another database
+            LEFT JOIN {db2}.users u ON tv.verifiedBy = u.id
             WHERE t.eventId = :event_id and o.status = "SUCCESS"
             """
 
@@ -105,14 +140,11 @@ async def read_data2(
             base_query += " ORDER BY od.NAME"
 
             result_proxy = await conn.execute(text(base_query), params)
-
             data = result_proxy.fetchall()
 
-            # Format data
             formatted_data = []
             for row in data:
                 row_dict = dict(row)
-
                 formatted_row = {
                     "address": row_dict["address"],
                     "name": row_dict["name"],
@@ -120,7 +152,7 @@ async def read_data2(
                     "email": row_dict["email"],
                     "gender": row_dict["gender"],
                     "id": row_dict["id"],
-                    "commiteeName": "",  # Placeholder since the field isn't in the query
+                    "commiteeName": "",
                     "orderId": row_dict["orderId"],
                     "phoneNumber": row_dict["phoneNumber"],
                     "socialMedia": row_dict["socialMedia"],
@@ -141,7 +173,8 @@ async def read_data2(
                     "verifiedBy": {
                         "id": row_dict.get("verifiedById"),
                         "name": row_dict.get("verifiedByName"),
-                    }
+                    },
+                    "isHide": row_dict.get("location") == '666'
                 }
 
                 formatted_data.append(formatted_row)
@@ -153,20 +186,19 @@ async def read_data2(
 
     except Exception as e:
         print(e)
-        response.status_code = 500  # Internal Server Error
-        return {
-            "success": False,
-            "error": str(e),
-        }
+        response.status_code = 500
+        return {"success": False, "error": str(e)}
 
 
-@ticket.get('/api/events/{event_id}/ticket-type-summary')
+@ticket.get('/api/events/ticket-type-summary')
 async def ticket_type_summary(
-    event_id: str,
     response: Response,
+    user: dict = Depends(get_current_user)  # Ambil user dari token
 ):
     try:
+        eventId = user["eventId"]
         async with online_engine.begin() as conn:
+
             summary_query = f"""
             SELECT
                 t.name AS ticketTypeName,
@@ -186,7 +218,7 @@ async def ticket_type_summary(
             ORDER BY t.name;
             """
 
-            params = {'event_id': event_id}
+            params = {'event_id': eventId}
             result_proxy = await conn.execute(text(summary_query), params)
 
             data = result_proxy.fetchall()
@@ -232,7 +264,7 @@ async def delete_order(id: str, response: Response):
             if result.rowcount == 0:
                 raise HTTPException(status_code=404, detail="Order not found")
 
-        return {"status": "SUCCESS", "message": f"Order with ID {id} deleted successfully"}
+        return {"status": "SUCCESS", "data": f"Order with ID {id} deleted successfully"}
 
     except HTTPException as e:
         raise e
@@ -243,8 +275,9 @@ async def delete_order(id: str, response: Response):
 
 
 # GET EVENTs
-@ticket.get("/api/events/{event_id}")
-async def get_event_details2(event_id: str, response: Response):
+@ticket.get("/api/events")
+async def get_event_details2(response: Response, user: dict = Depends(get_current_user)):
+    event_id = user["eventId"]
     try:
         async with online_engine.connect() as conn:
             event_query = f"""
@@ -291,9 +324,10 @@ async def get_event_details2(event_id: str, response: Response):
 
 
 # GET EO
-@ticket.get('/api/event-organizers/{eventId}')
-async def get_event_organizers(eventId: str, response: Response):
+@ticket.get('/api/event-organizers')
+async def get_event_organizers(response: Response, user: dict = Depends(get_current_user)):
     try:
+        eventId = user["eventId"]
         async with online_engine.begin() as conn:
             # Query untuk mendapatkan semua event organizers berdasarkan eventId
             fetch_query = f"""
@@ -326,7 +360,7 @@ async def get_event_organizers(eventId: str, response: Response):
                     "username": organizer.username,
                     "name": organizer.name,
                     "email": organizer.email,  # Properti phone ditambahkan
-                    "isAdmin": organizer.isAdmin,
+                    "isAdmin": organizer.isAdmin == 1,
                     "totalVerification": organizer.totalVerification,
                 }
                 for organizer in event_organizers
@@ -358,8 +392,9 @@ class TicketBase(BaseModel):
 
 
 @ticket.post('/api/tickets')
-async def create_ticket(ticket_data: TicketBase, response: Response):
+async def create_ticket(ticket_data: TicketBase, response: Response, user: dict = Depends(get_current_user)):
     try:
+        eventId = user["eventId"]
         async with online_engine.begin() as conn:
             insert_query = f"""
             INSERT INTO {db1}.tickets (name, price, stock, adminFee, eventId, id, updatedAt)
@@ -370,7 +405,7 @@ async def create_ticket(ticket_data: TicketBase, response: Response):
                 "price": ticket_data.price,
                 "stock": ticket_data.stock,
                 "adminFee": 10000,
-                "eventId": ticket_data.eventId,
+                "eventId": eventId,
                 "id": uuid.uuid4(),
                 "updatedAt": datetime.now(),
             }
@@ -417,10 +452,11 @@ async def update_ticket(ticket_id: str, ticket_data: TicketBase, response: Respo
 # VERIFY
 
 
-@ticket.put('/api/events/{event_id}/orders/{hash}')
-async def update_verification(hash: str, event_id: str, request: Request, response: Response):
+@ticket.put('/api/events/orders/{hash}')
+async def update_verification(hash: str,  request: Request, response: Response, user: dict = Depends(get_current_user)):
     try:
         # Ambil data dari body request
+        event_id = user["eventId"]
         body = await request.json()
         is_verify = body.get('isVerify')  # Mengambil nilai isVerify dari body
         verified_by = body.get('verifiedBy')  # ID user yang memverifikasi
@@ -428,18 +464,28 @@ async def update_verification(hash: str, event_id: str, request: Request, respon
         # Validasi body request
         if is_verify is None or not isinstance(is_verify, bool):
             response.status_code = 400  # Bad Request
+
             return {
                 "success": False,
-                "statusCode": 400,
-                "message": "'isVerify' harus berupa boolean."
+                "status": 'Failed',
+                "code": '',
+                "data": {
+                    "code": "KARTJIS.44",
+                    "detail": "'isVerify' harus berupa boolean."
+                },
             }
 
         if not verified_by:
             response.status_code = 400  # Bad Request
+
             return {
                 "success": False,
-                "statusCode": 400,
-                "message": "'verifiedBy' tidak boleh kosong."
+                "status": 'Failed',
+                "code": '',
+                "data": {
+                    "code": "KARTJIS.44",
+                    "detail": "'verifiedBy' tidak boleh kosong."
+                },
             }
 
         # Set zona waktu lokal (misalnya waktu Makassar)
@@ -461,11 +507,15 @@ async def update_verification(hash: str, event_id: str, request: Request, respon
             row = check_result.fetchone()
 
             if not row:
-                response.status_code = 404  # Not Found
+                response.status_code = 200  # Not Found
                 return {
                     "success": False,
-                    "statusCode": 404,
-                    "message": "Kartjis tidak ditemukan.",
+                    "status": 'Failed',
+                    "code": '',
+                    "data": {
+                        "code": "KARTJIS.40",
+                        "detail": "Kartjis tidak ditemukan."
+                    },
                 }
 
             # Ambil status verifikasi saat ini
@@ -473,11 +523,15 @@ async def update_verification(hash: str, event_id: str, request: Request, respon
 
             # Cek kondisi untuk isVerify
             if is_verify and verification_status:
-                response.status_code = 400  # Bad Request
+                response.status_code = 200  # Bad Request
                 return {
                     "success": False,
-                    "statusCode": 400,
-                    "message": "Kartjis sudah diverifikasi.",
+                    "status": 'Failed',
+                    "code": '',
+                    "data": {
+                        "code": "KARTJIS.41",
+                        "detail": "Kartjis sudah diverifikasi."
+                    }
                 }
 
             # Update status verifikasi
@@ -501,10 +555,15 @@ async def update_verification(hash: str, event_id: str, request: Request, respon
             })
 
         # Response sukses
+
         return {
             "success": True,
-            "statusCode": 200 if is_verify else 222,
-            "message": "Berhasil memverifikasi Kartjis." if is_verify else "Berhasil membatalkan verifikasi Kartjis.",
+            "status": 'SUCCEss',
+            "code": '',
+            "data": {
+                "code": 'KARTJIS.21' if is_verify else "KARTJIS.20",
+                "detail": "Berhasil memverifikasi Kartjis." if is_verify else "Berhasil membatalkan verifikasi Kartjis."
+            },
         }
 
     except HTTPException as http_error:
@@ -515,16 +574,22 @@ async def update_verification(hash: str, event_id: str, request: Request, respon
         response.status_code = 500  # Internal Server Error
         return {
             "success": False,
-            "statusCode": 500,
-            "message": "Terjadi kesalahan internal server.",
-            "error": str(e),
-        }
+            "status": 'Failed',
+            "code": '',
+                    "data": {
+                        "code": "KARTJIS.50",
+                        "detail": "Terjadi kesalahan internal server."
+                    }
+        },
 
 
 # Add OTS
-@ticket.post('/api/events/{event_id}/offline-transactions')
-async def ots2(request: dict, event_id: str, response: Response):
-    tickets = request.get("data", [])  # Mengambil array tiket dari key 'data'
+@ticket.post('/api/events/offline-transactions')
+async def ots2(request: dict, response: Response,  user: dict = Depends(get_current_user)):
+    tickets = request.get("data", [])
+    event_id = user['eventId']
+    ordal = request.get('ordal', False)
+
     async with online_engine.begin() as conn:
         try:
             for ticket in tickets:
@@ -578,6 +643,7 @@ async def ots2(request: dict, event_id: str, response: Response):
                         "gender": ticket["customer_gender"],
                         "createdAt": current_time,
                         "updatedAt": current_time,
+                        "address": '',
                     },
                 )
 
@@ -613,7 +679,7 @@ async def ots2(request: dict, event_id: str, response: Response):
                         "gender": ticket["customer_gender"],
                         "address": ticket["address"],
                         "socialMedia": ticket["social_media"],
-                        "location": None,
+                        "location": '666' if ordal else None,
                         "commiteeName": None,
                     },
                 )
@@ -627,11 +693,12 @@ async def ots2(request: dict, event_id: str, response: Response):
                 await conn.execute(
                     text(f"""
                         INSERT INTO {db1}.TicketVerification (`id`, `hash`, `isScanned`, `createdAt`, `updatedAt`, `orderDetailId`)
-                        VALUES (:id, :hash, 1, :createdAt, :updatedAt, :orderDetailId)
+                        VALUES (:id, :hash, :isScanned, :createdAt, :updatedAt, :orderDetailId)
                     """),
                     {
                         "id": verification_id,
                         "hash": hash_value,
+                        "isScanned": 0 if ordal else 1,
                         "createdAt": current_time,
                         "updatedAt": current_time,
                         "orderDetailId": order_detail_id,
@@ -640,7 +707,7 @@ async def ots2(request: dict, event_id: str, response: Response):
 
             return {
                 "success": True,
-                "message": "Tickets successfully created.",
+                "data": "Tickets successfully created.",
             }
 
         except Exception as e:
