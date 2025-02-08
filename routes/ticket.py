@@ -36,7 +36,7 @@ class LoginData(BaseModel):
 
 
 def create_token(user_data: dict):
-    expiration = datetime.utcnow() + timedelta(hours=1)
+    expiration = datetime.utcnow() + timedelta(days=7)
     payload = {**user_data, "exp": expiration}
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
