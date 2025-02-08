@@ -5,19 +5,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-
-app = FastAPI()
-
 app.add_middleware(
     CORSMiddleware,
     # Ganti "*" dengan domain tertentu, misalnya "http://localhost:8080"
     allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
-     allow_headers=["Authorization", "Content-Type"], 
+    allow_headers=["Authorization", "Content-Type"],
 )
-
 
 app.include_router(ticket)
 
