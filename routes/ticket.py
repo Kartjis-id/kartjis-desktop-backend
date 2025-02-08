@@ -10,6 +10,7 @@ from sqlalchemy import text
 from config.db import online_engine
 from datetime import datetime, timedelta
 import uvicorn
+from fastapi.middleware.cors import CORSMiddleware
 import bcrypt
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi import Security, Depends
@@ -19,7 +20,26 @@ SECRET_KEY = "a_very_secret_key_1234567890!@#$%^&*()"
 ALGORITHM = "HS256"
 
 
+app = FastAPI()
+
+# Konfigurasi CORS (Hanya bisa di FastAPI, bukan APIRouter)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Bisa diganti dengan daftar domain yang diizinkan
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["Authorization", "Content-Type"],
+)
+
 ticket = APIRouter()
+
+
+@ticket.get("/")
+async def root():
+    return {"message": "CORS sudah aktif!"}
+
+# Daftarkan router ke aplikasi FastAPI
+app.include_router(ticket, prefix="/api/events/orders")
 
 
 db1 = 'kartjis_old_db'
