@@ -597,13 +597,52 @@ async def ots2(request: dict, response: Response,  user: dict = Depends(get_curr
 
     async with online_engine.begin() as conn:
         try:
+            if len(tickets) <= 0:
+                return
+            order_id = str(uuid.uuid4())
+            current_time = datetime.now()
+            customer_id = str(uuid.uuid4())
+            ticket1 = tickets[0]
+
+            await conn.execute(
+                text(f"""
+                    INSERT INTO {db1}.customers (`id`, `name`, `email`, `birthDate`, `phoneNumber`, `gender`, `createdAt`, `updatedAt`)
+                    VALUES (:id, :name, :email, :birthDate, :phoneNumber, :gender, :createdAt, :updatedAt)
+                """),
+                {
+                    "id": customer_id,
+                    "name": ticket1["customer_name"],
+                    "email": ticket1["customer_email"],
+                    "birthDate": ticket1["customer_birthdate"],
+                    "phoneNumber": ticket1["customer_phone"],
+                    "gender": ticket1["customer_gender"],
+                    "createdAt": current_time,
+                    "updatedAt": current_time,
+                    "address": '',
+                },
+            )
+
+            # Insert into `orders`
+            await conn.execute(
+                text(f"""
+                    INSERT INTO {db1}.orders (`id`, `status`, `createdAt`, `updatedAt`, `customerId`, `eventId`)
+                    VALUES (:id, 'SUCCESS', :createdAt, :updatedAt, :customerId, :eventId)
+                """),
+                {
+                    "id": order_id,
+                    "createdAt": current_time,
+                    "updatedAt": current_time,
+                    "eventId": event_id,
+                    "customerId": customer_id
+                },
+            )
+
+            # Insert into `customers`
+
             for ticket in tickets:
                 ticket_id = ticket["ticket_id"],
-                customer_id = str(uuid.uuid4())
-                order_id = str(uuid.uuid4())
                 order_detail_id = str(uuid.uuid4())
                 verification_id = str(uuid.uuid4())
-                current_time = datetime.now()
 
                 result = await conn.execute(
                     text(
@@ -632,40 +671,6 @@ async def ots2(request: dict, response: Response,  user: dict = Depends(get_curr
                             "updatedAt": current_time,
                         },
                     )
-
-                # Insert into `customers`
-                await conn.execute(
-                    text(f"""
-                        INSERT INTO {db1}.customers (`id`, `name`, `email`, `birthDate`, `phoneNumber`, `gender`, `createdAt`, `updatedAt`)
-                        VALUES (:id, :name, :email, :birthDate, :phoneNumber, :gender, :createdAt, :updatedAt)
-                    """),
-                    {
-                        "id": customer_id,
-                        "name": ticket["customer_name"],
-                        "email": ticket["customer_email"],
-                        "birthDate": ticket["customer_birthdate"],
-                        "phoneNumber": ticket["customer_phone"],
-                        "gender": ticket["customer_gender"],
-                        "createdAt": current_time,
-                        "updatedAt": current_time,
-                        "address": '',
-                    },
-                )
-
-                # Insert into `orders`
-                await conn.execute(
-                    text(f"""
-                        INSERT INTO {db1}.orders (`id`, `status`, `createdAt`, `updatedAt`, `customerId`, `eventId`)
-                        VALUES (:id, 'SUCCESS', :createdAt, :updatedAt, :customerId, :eventId)
-                    """),
-                    {
-                        "id": order_id,
-                        "createdAt": current_time,
-                        "updatedAt": current_time,
-                        "customerId": customer_id,
-                        "eventId": event_id,
-                    },
-                )
 
                 # Insert into `orderdetails`
                 await conn.execute(
