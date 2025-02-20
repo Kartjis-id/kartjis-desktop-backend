@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import HTTPException, Request, Response
 import jwt
 import hashlib
@@ -201,7 +202,7 @@ async def ticket_type_summary(
     user: dict = Depends(get_current_user)  # Ambil user dari token
 ):
     try:
-        eventId = user["eventId"]
+        event_id = user["eventId"]
         async with online_engine.begin() as conn:
 
             summary_query = f"""
@@ -214,21 +215,25 @@ async def ticket_type_summary(
                 t.stock AS stock,
                 t.adminFee AS adminFee,
                 COALESCE(t.price * COUNT(od.id), 0) AS totalPrice,
-                COALESCE((t.price * COUNT(od.id)) + (COUNT(od.id) * t.adminFee), 0) AS revenueAfterAdminFee
+                COALESCE((t.price * COUNT(od.id)) + (COUNT(od.id) * t.adminFee), 0) AS revenueAfterAdminFee,
+                COALESCE(SUM(CASE WHEN tv.isScanned = 1 THEN 1 ELSE 0 END), 0) AS verifiedCount,
+                COALESCE(SUM(CASE WHEN tv.isScanned = 0 THEN 1 ELSE 0 END), 0) AS unverifiedCount
             FROM {db1}.tickets AS t
             LEFT JOIN {db1}.orderDetails AS od ON od.ticketId = t.id
             LEFT JOIN {db1}.orders AS o ON od.orderId = o.id AND o.status = 'SUCCESS'
-            WHERE t.eventId = :event_id
+            LEFT JOIN {db1}.TicketVerification tv ON tv.orderDetailId = od.id
+            WHERE t.eventId = :event_id 
+                AND o.status = 'SUCCESS'
+                AND od.location <> '666'
             GROUP BY t.id
             ORDER BY t.name;
             """
 
-            params = {'event_id': eventId}
+            params = {'event_id': event_id}
             result_proxy = await conn.execute(text(summary_query), params)
-
             data = result_proxy.fetchall()
 
-            summary_data = [
+            ticket_counts = [
                 {
                     "ticketTypeName": row["ticketTypeName"],
                     "totalSold": row["totalSold"],
@@ -238,15 +243,31 @@ async def ticket_type_summary(
                     "totalPrice": row["totalPrice"],
                     "adminFee": row["adminFee"],
                     "stock": row["stock"],
-                    "revenueAfterAdminFee": row["revenueAfterAdminFee"]
+                    "revenueAfterAdminFee": row["revenueAfterAdminFee"],
+                    "verifiedCount": row["verifiedCount"],
+                    "unverifiedCount": row["unverifiedCount"],
                 }
                 for row in data
             ]
 
-        return {
-            "status": "SUCCESS",
-            "data": summary_data
-        }
+            # Hitung summary keseluruhan
+            total_tickets = sum(row["totalSold"] for row in data)
+            total_verified = sum(row["verifiedCount"] for row in data)
+            total_unverified = sum(row["unverifiedCount"] for row in data)
+
+            ticket_summary = {
+                "total": total_tickets,
+                "verifiedCount": total_verified,
+                "unverifiedCount": total_unverified
+            }
+
+            return {
+                "status": "SUCCESS",
+                "data": {
+                    "ticketSummary": ticket_summary,
+                    "ticketCounts": ticket_counts
+                }
+            }
 
     except Exception as e:
         print(e)
@@ -500,18 +521,28 @@ async def update_verification(hash: str,  request: Request, response: Response, 
         async with online_engine.begin() as conn:
             # Query untuk memeriksa status tiket
             check_query = f"""
-                SELECT tv.isScanned, tv.hash
+                SELECT od.address as address, od.birthDate as birthDate,
+                od.email AS email, od.gender as gender, od.id as id,
+                od.location as location, od.NAME AS name, o.id as orderId, od.phoneNumber as phoneNumber,
+                od.socialMedia as socialMedia,
+                t.id as ticketId, t.name as ticketName, t.price as ticketPrice,
+                o.createdAt as orderCreatedAt,
+                tv.hash AS hash, tv.isScanned AS isVerified, tv.id as tvId, tv.updatedAt as verifiedAt,
+                ROW_NUMBER() OVER (PARTITION BY od.orderId ORDER BY od.NAME) AS ticketNum, tv.verifiedBy,
+                COUNT(*) OVER (PARTITION BY od.orderId) AS ticketCount,
+                u.id AS verifiedById, u.name AS verifiedByName
                 FROM {db1}.TicketVerification AS tv
-                INNER JOIN {db1}.orderDetails AS od ON tv.orderDetailId = od.id
-                INNER JOIN {db1}.tickets AS t ON od.ticketId = t.id
+                INNER JOIN {db1}.orderDetails AS od ON tv.orderDetailId=od.id
+                INNER JOIN {db1}.tickets AS t ON od.ticketId=t.id
                 INNER JOIN {db1}.orders o ON od.orderId = o.id
+                LEFT JOIN {db2}.users u ON tv.verifiedBy = u.id
                 WHERE tv.hash = :hash AND t.eventId = :event_id AND o.status = 'SUCCESS'
             """
 
             check_result = await conn.execute(text(check_query), {"hash": hash, "event_id": event_id})
-            row = check_result.fetchone()
+            row_dict = check_result.fetchone()
 
-            if not row:
+            if not row_dict:
                 response.status_code = 200  # Not Found
                 return {
                     "success": False,
@@ -524,10 +555,40 @@ async def update_verification(hash: str,  request: Request, response: Response, 
                 }
 
             # Ambil status verifikasi saat ini
-            verification_status = row[0]  # Nilai isScanned
+            formatted_row = {
+                "address": row_dict["address"],
+                "name": row_dict["name"],
+                "birthDate": row_dict["birthDate"],
+                "email": row_dict["email"],
+                "gender": row_dict["gender"],
+                "id": row_dict["id"],
+                "commiteeName": "",
+                "orderId": row_dict["orderId"],
+                "phoneNumber": row_dict["phoneNumber"],
+                "socialMedia": row_dict["socialMedia"],
+                "ticketId": row_dict["ticketId"],
+                "verifiedAt": row_dict["verifiedAt"],
+                "ticket": {
+                    "id": row_dict["ticketId"],
+                    "name": row_dict["ticketName"],
+                    "eventId": event_id,
+                    "price": row_dict["ticketPrice"]
+                },
+                "eventId": event_id,
+                "orderCreatedAt": row_dict["orderCreatedAt"],
+                "isScanned": bool(row_dict["isVerified"]),
+                "hash": row_dict["hash"],
+                "ticketCount": row_dict["ticketCount"],
+                "ticketNum": row_dict["ticketNum"],
+                "verifiedBy": {
+                    "id": row_dict["verifiedById"],
+                    "name": row_dict["verifiedByName"],
+                },
+                "isHide": row_dict["location"] == '666'
+            }
 
-            # Cek kondisi untuk isVerify
-            if is_verify and verification_status:
+
+            if is_verify and bool(row_dict["isVerified"]):
                 response.status_code = 200  # Bad Request
                 return {
                     "success": False,
@@ -535,8 +596,8 @@ async def update_verification(hash: str,  request: Request, response: Response, 
                     "code": '',
                     "data": {
                         "code": "KARTJIS.41",
-                        "detail": "Kartjis sudah diverifikasi."
-                    }
+                        "detail": "Kartjis sudah diverifikasi.",
+                        "orderDetail": formatted_row, }
                 }
 
             # Update status verifikasi
@@ -557,6 +618,7 @@ async def update_verification(hash: str,  request: Request, response: Response, 
                 "verified_by": verified_by,
                 "hash": hash,
                 "event_id": event_id,
+                "orderDetail": formatted_row,
             })
 
         # Response sukses
@@ -928,6 +990,140 @@ async def sync_ots(request: dict, event_id: str, response: Response):
                 "success": False,
                 "error": str(e),
             }
+
+
+@ticket.get('/api/events/orders2')
+async def read_orders2(
+    response: Response,
+    search: Optional[str] = Query(None, description="Search by name or email"),
+    ticket_type: Optional[str] = Query(
+        None, description="Filter by ticket type"),
+    verified: Optional[bool] = Query(
+        None, description="Filter by verification status (true/false)"),
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(
+        50, ge=1, le=100, description="Number of results per page"),
+    user: dict = Depends(get_current_user),
+):
+    try:
+        event_id = user["eventId"]
+        offset = (page - 1) * page_size
+
+        async with online_engine.begin() as conn:
+            base_query = text(f"""
+            SELECT od.address, od.birthDate, od.email, od.gender, od.id, od.location, od.NAME AS name,
+                   o.id as orderId, od.phoneNumber, od.socialMedia, t.id as ticketId, t.name as ticketName, t.price as ticketPrice,
+                   o.createdAt as orderCreatedAt, tv.hash, tv.isScanned AS isVerified, tv.id as tvId, tv.updatedAt as verifiedAt,
+                   tv.verifiedBy, u.id AS verifiedById, u.name AS verifiedByName,
+                   ROW_NUMBER() OVER (PARTITION BY od.orderId ORDER BY od.NAME) AS ticketNum,
+                   COUNT(*) OVER (PARTITION BY od.orderId) AS ticketCount
+            FROM {db1}.TicketVerification AS tv
+            INNER JOIN {db1}.orderDetails AS od ON tv.orderDetailId = od.id
+            INNER JOIN {db1}.tickets AS t ON od.ticketId = t.id
+            INNER JOIN {db1}.orders o ON od.orderId = o.id
+            LEFT JOIN {db2}.users u ON tv.verifiedBy = u.id
+            WHERE t.eventId = :event_id 
+                  AND o.status = 'SUCCESS'
+                  AND od.location <> '666'
+            """)
+
+            count_query = text(f"""
+            SELECT COUNT(*)
+            FROM {db1}.orders o
+            INNER JOIN {db1}.orderDetails od ON o.id = od.orderId
+            INNER JOIN {db1}.tickets t ON od.ticketId = t.id
+            INNER JOIN {db1}.TicketVerification AS tv ON tv.orderDetailId = od.id
+            WHERE t.eventId = :event_id 
+                  AND o.status = 'SUCCESS'
+                  AND od.location <> '666'
+            """)
+
+            params = {'event_id': event_id}
+
+            if search:
+                base_query = text(str(
+                    base_query) + " AND (LOWER(od.name) LIKE LOWER(:search) OR LOWER(od.email) LIKE LOWER(:search))")
+                count_query = text(str(
+                    count_query) + " AND (LOWER(od.name) LIKE LOWER(:search) OR LOWER(od.email) LIKE LOWER(:search))")
+                params['search'] = f"%{search}%"
+
+            if ticket_type:
+                base_query = text(str(base_query) +
+                                  " AND t.name = :ticket_type")
+                count_query = text(str(count_query) +
+                                   " AND t.name = :ticket_type")
+                params['ticket_type'] = ticket_type
+
+            if verified is not None:
+                base_query = text(str(base_query) +
+                                  " AND tv.isScanned = :verified")
+                count_query = text(str(count_query) +
+                                   " AND tv.isScanned = :verified")
+                params['verified'] = 1 if verified else 0
+
+            base_query = text(
+                str(base_query) + " ORDER BY od.NAME LIMIT :page_size OFFSET :offset")
+            params.update({'page_size': page_size, 'offset': offset})
+
+            # Execute queries
+            result_proxy = await conn.execute(base_query, params)
+            data = result_proxy.mappings().all()
+
+            count_result = await conn.execute(count_query, params)
+            total_records = count_result.scalar()
+
+            total_pages = (total_records + page_size - 1) // page_size
+
+            formatted_data = [
+                {
+                    "address": row["address"],
+                    "name": row["name"],
+                    "birthDate": row["birthDate"],
+                    "email": row["email"],
+                    "gender": row["gender"],
+                    "id": row["id"],
+                    "orderId": row["orderId"],
+                    "phoneNumber": row["phoneNumber"],
+                    "socialMedia": row["socialMedia"],
+                    "ticketId": row["ticketId"],
+                    "verifiedAt": row["verifiedAt"],
+                    "ticket": {
+                        "id": row["ticketId"],
+                        "name": row["ticketName"],
+                        "eventId": event_id,
+                        "price": row["ticketPrice"]
+                    },
+                    "eventId": event_id,
+                    "orderCreatedAt": row["orderCreatedAt"],
+                    "isScanned": bool(row["isVerified"]),
+                    "hash": row["hash"],
+                    "ticketCount": row["ticketCount"],
+                    "ticketNum": row["ticketNum"],
+                    "verifiedBy": {
+                        "id": row["verifiedById"],
+                        "name": row["verifiedByName"],
+                    },
+                    "isHide": row["location"] == '666'
+                } for row in data
+            ]
+
+        return {
+            "status": "SUCCESS",
+            "message": "okay",
+            "data": {
+                "tickets": formatted_data,
+                "pagination": {
+                    "totalRecords": total_records,
+                    "totalPages": total_pages,
+                    "currentPage": page,
+                    "pageSize": page_size
+                },
+            }
+        }
+    except Exception as e:
+        response.status_code = 500
+        return {"success": False, "error": str(e)}
+
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=3000, reload=True)
