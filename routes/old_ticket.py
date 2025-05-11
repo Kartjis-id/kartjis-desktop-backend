@@ -20,12 +20,12 @@
 # ALGORITHM = "HS256"
 
 
-# ticket = APIRouter()
+# # old_ticket = APIRouter()
 
 
-# @ticket.get("/")
-# async def root():
-#     return {"message": "CORS sudah aktif!"}
+# # @ticket.get("/")
+# # async def root():
+# #     return {"message": "CORS sudah aktif!"}
 
 
 # db1 = 'kartjis_old_db'
@@ -62,8 +62,7 @@
 # # Endpoint login yang menghasilkan token
 
 
-# @ticket.post('/api/users/login')
-# async def login(login_data: LoginData, response: Response):
+# async def loginOld(login_data: LoginData, response: Response):
 #     try:
 #         async with online_engine.begin() as conn:
 #             fetch_query = f"""
@@ -108,9 +107,9 @@
 #         return {"success": False, "error": "An internal server error occurred"}
 
 
-# # GEt ORDERS
-# @ticket.get('/api/events/orders')
-# async def read_orders(
+# # # GEt ORDERS
+# # @ticket.get('/api/events/orders')
+# async def read_orders_old(
 #     response: Response,
 #     search: str = Query(default=None, description="Search by name or email"),
 #     user: dict = Depends(get_current_user)  # Ambil user dari token
@@ -196,8 +195,7 @@
 #         return {"success": False, "error": str(e)}
 
 
-# @ticket.get('/api/events/ticket-type-summary')
-# async def ticket_type_summary(
+# async def ticket_type_summary_old(
 #     response: Response,
 #     user: dict = Depends(get_current_user)  # Ambil user dari token
 # ):
@@ -278,31 +276,29 @@
 #         }
 
 
-# @ticket.delete('/api/orders/{id}')
-# async def delete_order(id: str, response: Response):
-#     try:
-#         async with online_engine.begin() as conn:
-#             # Delete query
-#             delete_query = f"DELETE FROM {db1}.orders WHERE id = :id"
-#             result = await conn.execute(text(delete_query), {'id': id})
+# # @ticket.delete('/api/orders/{id}')
+# # async def delete_order(id: str, response: Response):
+# #     try:
+# #         async with online_engine.begin() as conn:
+# #             # Delete query
+# #             delete_query = f"DELETE FROM {db1}.orders WHERE id = :id"
+# #             result = await conn.execute(text(delete_query), {'id': id})
 
-#             # Check if any row was deleted
-#             if result.rowcount == 0:
-#                 raise HTTPException(status_code=404, detail="Order not found")
+# #             # Check if any row was deleted
+# #             if result.rowcount == 0:
+# #                 raise HTTPException(status_code=404, detail="Order not found")
 
-#         return {"status": "SUCCESS", "data": f"Order with ID {id} deleted successfully"}
+# #         return {"status": "SUCCESS", "data": f"Order with ID {id} deleted successfully"}
 
-#     except HTTPException as e:
-#         raise e
-#     except Exception as e:
-#         print(e)
-#         response.status_code = 500  # Internal Server Error
-#         return {"status": "ERROR", "error": str(e)}
+# #     except HTTPException as e:
+# #         raise e
+# #     except Exception as e:
+# #         print(e)
+# #         response.status_code = 500  # Internal Server Error
+# #         return {"status": "ERROR", "error": str(e)}
 
 
-# # GET EVENTs
-# @ticket.get("/api/events")
-# async def get_event_details2(response: Response, user: dict = Depends(get_current_user)):
+# async def get_event_details_old(response: Response, user: dict = Depends(get_current_user)):
 #     event_id = user["eventId"]
 #     try:
 #         async with online_engine.connect() as conn:
@@ -349,9 +345,8 @@
 #             "message": str(e)}
 
 
-# # GET EO
-# @ticket.get('/api/event-organizers')
-# async def get_event_organizers(response: Response, user: dict = Depends(get_current_user)):
+# # # GET EO
+# async def get_event_organizers_old(response: Response, user: dict = Depends(get_current_user)):
 #     try:
 #         eventId = user["eventId"]
 #         async with online_engine.begin() as conn:
@@ -409,77 +404,77 @@
 #         return {"success": False, "error": "An internal server error occurred"}
 
 
-# # ADD TICKET
-# class TicketBase(BaseModel):
-#     name: str
-#     price: float
-#     stock: int
-#     eventId: str
+# # # ADD TICKET
+# # class TicketBase(BaseModel):
+# #     name: str
+# #     price: float
+# #     stock: int
+# #     eventId: str
 
 
-# @ticket.post('/api/tickets')
-# async def create_ticket(ticket_data: TicketBase, response: Response, user: dict = Depends(get_current_user)):
-#     try:
-#         eventId = user["eventId"]
-#         async with online_engine.begin() as conn:
-#             insert_query = f"""
-#             INSERT INTO {db1}.tickets (name, price, stock, adminFee, eventId, id, updatedAt)
-#             VALUES (:name, :price, :stock, :adminFee, :eventId, :id, :updatedAt)
-#             """
-#             params = {
-#                 "name": ticket_data.name,
-#                 "price": ticket_data.price,
-#                 "stock": ticket_data.stock,
-#                 "adminFee": 10000,
-#                 "eventId": eventId,
-#                 "id": uuid.uuid4(),
-#                 "updatedAt": datetime.now(),
-#             }
+# # @ticket.post('/api/tickets')
+# # async def create_ticket(ticket_data: TicketBase, response: Response, user: dict = Depends(get_current_user)):
+# #     try:
+# #         eventId = user["eventId"]
+# #         async with online_engine.begin() as conn:
+# #             insert_query = f"""
+# #             INSERT INTO {db1}.tickets (name, price, stock, adminFee, eventId, id, updatedAt)
+# #             VALUES (:name, :price, :stock, :adminFee, :eventId, :id, :updatedAt)
+# #             """
+# #             params = {
+# #                 "name": ticket_data.name,
+# #                 "price": ticket_data.price,
+# #                 "stock": ticket_data.stock,
+# #                 "adminFee": 10000,
+# #                 "eventId": eventId,
+# #                 "id": uuid.uuid4(),
+# #                 "updatedAt": datetime.now(),
+# #             }
 
-#             await conn.execute(text(insert_query), params)
+# #             await conn.execute(text(insert_query), params)
 
-#         return {"status": "SUCCESS", "message": "Ticket created successfully"}
-#     except Exception as e:
-#         print(e)
-#         response.status_code = 500  # Internal Server Error
-#         return {"success": False, "error": str(e)}
+# #         return {"status": "SUCCESS", "message": "Ticket created successfully"}
+# #     except Exception as e:
+# #         print(e)
+# #         response.status_code = 500  # Internal Server Error
+# #         return {"success": False, "error": str(e)}
 
-# # UODATE TICKEt
-
-
-# @ticket.put('/api/tickets/{ticket_id}')
-# async def update_ticket(ticket_id: str, ticket_data: TicketBase, response: Response):
-#     try:
-#         async with online_engine.begin() as conn:
-#             update_query = f"""
-#             UPDATE {db1}.tickets
-#             SET name = :name, price = :price, stock = :stock
-#             WHERE id = :ticket_id
-#             """
-#             params = {
-#                 "name": ticket_data.name,
-#                 "price": ticket_data.price,
-#                 "stock": ticket_data.stock,
-#                 "ticket_id": ticket_id,
-#             }
-
-#             result = await conn.execute(text(update_query), params)
-
-#             if result.rowcount == 0:
-#                 response.status_code = 404  # Not Found
-#                 return {"success": False, "message": "Ticket not found"}
-
-#         return {"status": "SUCCESS", "message": "Ticket updated successfully"}
-#     except Exception as e:
-#         print(e)
-#         response.status_code = 500  # Internal Server Error
-#         return {"success": False, "error": str(e)}
-
-# # VERIFY
+# # # UODATE TICKEt
 
 
-# @ticket.put('/api/events/orders/{hash}')
-# async def update_verification(hash: str,  request: Request, response: Response, user: dict = Depends(get_current_user)):
+# # @ticket.put('/api/tickets/{ticket_id}')
+# # async def update_ticket(ticket_id: str, ticket_data: TicketBase, response: Response):
+# #     try:
+# #         async with online_engine.begin() as conn:
+# #             update_query = f"""
+# #             UPDATE {db1}.tickets
+# #             SET name = :name, price = :price, stock = :stock
+# #             WHERE id = :ticket_id
+# #             """
+# #             params = {
+# #                 "name": ticket_data.name,
+# #                 "price": ticket_data.price,
+# #                 "stock": ticket_data.stock,
+# #                 "ticket_id": ticket_id,
+# #             }
+
+# #             result = await conn.execute(text(update_query), params)
+
+# #             if result.rowcount == 0:
+# #                 response.status_code = 404  # Not Found
+# #                 return {"success": False, "message": "Ticket not found"}
+
+# #         return {"status": "SUCCESS", "message": "Ticket updated successfully"}
+# #     except Exception as e:
+# #         print(e)
+# #         response.status_code = 500  # Internal Server Error
+# #         return {"success": False, "error": str(e)}
+
+# # # VERIFY
+
+
+# # @ticket.put('/api/events/orders/{hash}')
+# async def update_verification_old(hash: str,  request: Request, response: Response, user: dict = Depends(get_current_user)):
 #     try:
 #         # Ambil data dari body request
 #         event_id = user["eventId"]
@@ -650,349 +645,348 @@
 #         },
 
 
-# # Add OTS
-# @ticket.post('/api/events/offline-transactions')
-# async def ots2(request: dict, response: Response,  user: dict = Depends(get_current_user)):
-#     tickets = request.get("data", [])
-#     event_id = user['eventId']
-#     ordal = request.get('ordal', False)
+# # # Add OTS
+# # @ticket.post('/api/events/offline-transactions')
+# # async def ots2(request: dict, response: Response,  user: dict = Depends(get_current_user)):
+# #     tickets = request.get("data", [])
+# #     event_id = user['eventId']
+# #     ordal = request.get('ordal', False)
 
-#     async with online_engine.begin() as conn:
-#         try:
-#             if len(tickets) <= 0:
-#                 return
-#             order_id = str(uuid.uuid4())
-#             current_time = datetime.now()
-#             customer_id = str(uuid.uuid4())
-#             ticket1 = tickets[0]
+# #     async with online_engine.begin() as conn:
+# #         try:
+# #             if len(tickets) <= 0:
+# #                 return
+# #             order_id = str(uuid.uuid4())
+# #             current_time = datetime.now()
+# #             customer_id = str(uuid.uuid4())
+# #             ticket1 = tickets[0]
 
-#             await conn.execute(
-#                 text(f"""
-#                     INSERT INTO {db1}.customers (`id`, `name`, `email`, `birthDate`, `phoneNumber`, `gender`, `createdAt`, `updatedAt`)
-#                     VALUES (:id, :name, :email, :birthDate, :phoneNumber, :gender, :createdAt, :updatedAt)
-#                 """),
-#                 {
-#                     "id": customer_id,
-#                     "name": ticket1["customer_name"],
-#                     "email": ticket1["customer_email"],
-#                     "birthDate": ticket1["customer_birthdate"],
-#                     "phoneNumber": ticket1["customer_phone"],
-#                     "gender": ticket1["customer_gender"],
-#                     "createdAt": current_time,
-#                     "updatedAt": current_time,
-#                     "address": '',
-#                 },
-#             )
+# #             await conn.execute(
+# #                 text(f"""
+# #                     INSERT INTO {db1}.customers (`id`, `name`, `email`, `birthDate`, `phoneNumber`, `gender`, `createdAt`, `updatedAt`)
+# #                     VALUES (:id, :name, :email, :birthDate, :phoneNumber, :gender, :createdAt, :updatedAt)
+# #                 """),
+# #                 {
+# #                     "id": customer_id,
+# #                     "name": ticket1["customer_name"],
+# #                     "email": ticket1["customer_email"],
+# #                     "birthDate": ticket1["customer_birthdate"],
+# #                     "phoneNumber": ticket1["customer_phone"],
+# #                     "gender": ticket1["customer_gender"],
+# #                     "createdAt": current_time,
+# #                     "updatedAt": current_time,
+# #                     "address": '',
+# #                 },
+# #             )
 
-#             # Insert into `orders`
-#             await conn.execute(
-#                 text(f"""
-#                     INSERT INTO {db1}.orders (`id`, `status`, `createdAt`, `updatedAt`, `customerId`, `eventId`)
-#                     VALUES (:id, 'SUCCESS', :createdAt, :updatedAt, :customerId, :eventId)
-#                 """),
-#                 {
-#                     "id": order_id,
-#                     "createdAt": current_time,
-#                     "updatedAt": current_time,
-#                     "eventId": event_id,
-#                     "customerId": customer_id
-#                 },
-#             )
+# #             # Insert into `orders`
+# #             await conn.execute(
+# #                 text(f"""
+# #                     INSERT INTO {db1}.orders (`id`, `status`, `createdAt`, `updatedAt`, `customerId`, `eventId`)
+# #                     VALUES (:id, 'SUCCESS', :createdAt, :updatedAt, :customerId, :eventId)
+# #                 """),
+# #                 {
+# #                     "id": order_id,
+# #                     "createdAt": current_time,
+# #                     "updatedAt": current_time,
+# #                     "eventId": event_id,
+# #                     "customerId": customer_id
+# #                 },
+# #             )
 
-#             # Insert into `customers`
+# #             # Insert into `customers`
 
-#             for ticket in tickets:
-#                 ticket_id = ticket["ticket_id"],
-#                 order_detail_id = str(uuid.uuid4())
-#                 verification_id = str(uuid.uuid4())
+# #             for ticket in tickets:
+# #                 ticket_id = ticket["ticket_id"],
+# #                 order_detail_id = str(uuid.uuid4())
+# #                 verification_id = str(uuid.uuid4())
 
-#                 result = await conn.execute(
-#                     text(
-#                         f"SELECT id FROM {
-#                             db1}.tickets WHERE `id` = :id and `eventId` = :eventId"
-#                     ),
-#                     {"id": ticket_id, "eventId": event_id},
-#                 )
-#                 existing_ticket = result.fetchone()
+# #                 result = await conn.execute(
+# #                     text(
+# #                         f"SELECT id FROM {
+# #                             db1}.tickets WHERE `id` = :id and `eventId` = :eventId"
+# #                     ),
+# #                     {"id": ticket_id, "eventId": event_id},
+# #                 )
+# #                 existing_ticket = result.fetchone()
 
-#                 if existing_ticket:
-#                     ticket_id = existing_ticket[0]
-#                 else:
-#                     await conn.execute(
-#                         text(f"""
-#                             INSERT INTO {db1}.tickets (`id`, `name`, `price`, `eventId`, `stock`, `createdAt`, `updatedAt`, `adminFee`)
-#                             VALUES (:id, :name, :price, :eventId, :stock, :createdAt, :updatedAt, 0)
-#                         """),
-#                         {
-#                             "id": ticket_id,
-#                             "name": 'OTS',
-#                             "price": 0,
-#                             "eventId": event_id,
-#                             "stock": 100,
-#                             "createdAt": current_time,
-#                             "updatedAt": current_time,
-#                         },
-#                     )
+# #                 if existing_ticket:
+# #                     ticket_id = existing_ticket[0]
+# #                 else:
+# #                     await conn.execute(
+# #                         text(f"""
+# #                             INSERT INTO {db1}.tickets (`id`, `name`, `price`, `eventId`, `stock`, `createdAt`, `updatedAt`, `adminFee`)
+# #                             VALUES (:id, :name, :price, :eventId, :stock, :createdAt, :updatedAt, 0)
+# #                         """),
+# #                         {
+# #                             "id": ticket_id,
+# #                             "name": 'OTS',
+# #                             "price": 0,
+# #                             "eventId": event_id,
+# #                             "stock": 100,
+# #                             "createdAt": current_time,
+# #                             "updatedAt": current_time,
+# #                         },
+# #                     )
 
-#                 # Insert into `orderdetails`
-#                 await conn.execute(
-#                     text(f"""
-#                         INSERT INTO {db1}.orderDetails (`id`, `ticketId`, `quantity`, `orderId`, `name`, `email`, `birthDate`, `phoneNumber`, `gender`, `address`, `socialMedia`, `location`, `commiteeName`)
-#                         VALUES (:id, :ticketId, 1, :orderId, :name, :email, :birthDate, :phoneNumber, :gender, :address, :socialMedia, :location, :commiteeName)
-#                     """),
-#                     {
-#                         "id": order_detail_id,
-#                         "ticketId": ticket_id,
-#                         "orderId": order_id,
-#                         "name": ticket["customer_name"],
-#                         "email": ticket["customer_email"],
-#                         "birthDate": ticket["customer_birthdate"],
-#                         "phoneNumber": ticket["customer_phone"],
-#                         "gender": ticket["customer_gender"],
-#                         "address": ticket["address"],
-#                         "socialMedia": ticket["social_media"],
-#                         "location": '666' if ordal else None,
-#                         "commiteeName": None,
-#                     },
-#                 )
+# #                 # Insert into `orderdetails`
+# #                 await conn.execute(
+# #                     text(f"""
+# #                         INSERT INTO {db1}.orderDetails (`id`, `ticketId`, `quantity`, `orderId`, `name`, `email`, `birthDate`, `phoneNumber`, `gender`, `address`, `socialMedia`, `location`, `commiteeName`)
+# #                         VALUES (:id, :ticketId, 1, :orderId, :name, :email, :birthDate, :phoneNumber, :gender, :address, :socialMedia, :location, :commiteeName)
+# #                     """),
+# #                     {
+# #                         "id": order_detail_id,
+# #                         "ticketId": ticket_id,
+# #                         "orderId": order_id,
+# #                         "name": ticket["customer_name"],
+# #                         "email": ticket["customer_email"],
+# #                         "birthDate": ticket["customer_birthdate"],
+# #                         "phoneNumber": ticket["customer_phone"],
+# #                         "gender": ticket["customer_gender"],
+# #                         "address": ticket["address"],
+# #                         "socialMedia": ticket["social_media"],
+# #                         "location": '666' if ordal else None,
+# #                         "commiteeName": None,
+# #                     },
+# #                 )
 
-#                 # Generate MD5 hash for ticket verification
-#                 random_number = random.randint(1000, 9999)
-#                 combined_string = f"{ticket['customer_email']}{
-#                     order_detail_id}{current_time}{random_number}"
-#                 hash_value = hashlib.md5(combined_string.encode()).hexdigest()
+# #                 # Generate MD5 hash for ticket verification
+# #                 random_number = random.randint(1000, 9999)
+# #                 combined_string = f"{ticket['customer_email']}{
+# #                     order_detail_id}{current_time}{random_number}"
+# #                 hash_value = hashlib.md5(combined_string.encode()).hexdigest()
 
-#                 await conn.execute(
-#                     text(f"""
-#                         INSERT INTO {db1}.TicketVerification (`id`, `hash`, `isScanned`, `createdAt`, `updatedAt`, `orderDetailId`)
-#                         VALUES (:id, :hash, :isScanned, :createdAt, :updatedAt, :orderDetailId)
-#                     """),
-#                     {
-#                         "id": verification_id,
-#                         "hash": hash_value,
-#                         "isScanned": 0 if ordal else 1,
-#                         "createdAt": current_time,
-#                         "updatedAt": current_time,
-#                         "orderDetailId": order_detail_id,
-#                     },
-#                 )
+# #                 await conn.execute(
+# #                     text(f"""
+# #                         INSERT INTO {db1}.TicketVerification (`id`, `hash`, `isScanned`, `createdAt`, `updatedAt`, `orderDetailId`)
+# #                         VALUES (:id, :hash, :isScanned, :createdAt, :updatedAt, :orderDetailId)
+# #                     """),
+# #                     {
+# #                         "id": verification_id,
+# #                         "hash": hash_value,
+# #                         "isScanned": 0 if ordal else 1,
+# #                         "createdAt": current_time,
+# #                         "updatedAt": current_time,
+# #                         "orderDetailId": order_detail_id,
+# #                     },
+# #                 )
 
-#             return {
-#                 "success": True,
-#                 "data": "Tickets successfully created.",
-#             }
+# #             return {
+# #                 "success": True,
+# #                 "data": "Tickets successfully created.",
+# #             }
 
-#         except Exception as e:
-#             print(e)
-#             response.status_code = 500  # Internal Server Error
-#             return {
-#                 "success": False,
-#                 "error": str(e),
-#             }
+# #         except Exception as e:
+# #             print(e)
+# #             response.status_code = 500  # Internal Server Error
+# #             return {
+# #                 "success": False,
+# #                 "error": str(e),
+# #             }
 
-# # Bom verification
-
-
-# @ticket.put('/api/events/{event_id}/tickets/verifications')
-# async def bulk_update_ticket_verifications(event_id: str, request: Request, response: Response):
-#     try:
-#         # Mengambil data dari body request
-#         body = await request.json()
-#         updates = body.get('data', [])  # List of updates
-
-#         if not isinstance(updates, list) or not updates:
-#             response.status_code = 400
-#             return {"success": False, "message": "Invalid request body. 'verifications' must be a non-empty list."}
-
-#         async with online_engine.begin() as conn:
-#             # Prepare update query
-#             for verification in updates:
-#                 hash_value = verification.get("hash")
-#                 is_verify = verification.get("isVerify")
-#                 verified_by_id = verification.get("verifiedById")
-
-#                 if not hash_value or is_verify is None:
-#                     continue  # Skip invalid entries
-
-#                 # Set timezone to local
-#                 local_tz = pytz.timezone("Asia/Makassar")
-#                 current_datetime = datetime.now(local_tz)
-
-#                 # Update query
-#                 update_query = f"""
-#                 UPDATE {db1}.TicketVerification AS tv
-#                 INNER JOIN {db1}.orderDetails AS od ON tv.orderDetailId = od.id
-#                 INNER JOIN {db1}.tickets AS t ON od.ticketId = t.id
-#                 SET
-#                     tv.isScanned = :is_verify,
-#                     tv.updatedAt = :updated_at,
-#                     tv.verifiedBy = :verified_by_id
-#                 WHERE
-#                     tv.hash = :hash_value
-#                     AND t.eventId = :event_id
-#                 """
-
-#                 # Execute update
-#                 await conn.execute(text(update_query), {
-#                     "is_verify": 1 if is_verify else 0,
-#                     "updated_at": current_datetime,
-#                     "verified_by_id": verified_by_id,
-#                     "hash_value": hash_value,
-#                     "event_id": event_id,
-#                 })
-
-#         # Return response
-#         return {
-#             "success": True,
-#             "message": "Bulk ticket verifications updated successfully."
-#         }
-
-#     except Exception as e:
-#         print(e)
-#         response.status_code = 500  # Internal Server Error
-#         return {
-#             "success": False,
-#             "message": "An error occurred while processing the request.",
-#             "error": str(e),
-#         }
-
-#     # Sync OTS
+# # # Bom verification
 
 
-# @ticket.put('/api/events/{event_id}/sync-offline-transactions')
-# async def sync_ots(request: dict, event_id: str, response: Response):
-#     tickets = request.get("data", [])  # Mengambil array tiket dari key 'data'
-#     async with online_engine.begin() as conn:
-#         try:
-#             for ticket in tickets:
-#                 # Diberikan di request body
-#                 ticket_id = ticket.get("ticket_id")
-#                 customer_id = uuid.uuid4()  # Fallback jika tidak ada
-#                 order_id = ticket.get("order_id")  # Diberikan di request body
-#                 # Diberikan di request body
-#                 order_detail_id = ticket.get("order_detail_id")
-#                 hash_value = ticket.get("hash")  # Diberikan di request body
-#                 current_time = datetime.now()
+# # @ticket.put('/api/events/{event_id}/tickets/verifications')
+# # async def bulk_update_ticket_verifications(event_id: str, request: Request, response: Response):
+# #     try:
+# #         # Mengambil data dari body request
+# #         body = await request.json()
+# #         updates = body.get('data', [])  # List of updates
 
-#                 # Cek tiket yang ada di database
-#                 result = await conn.execute(
-#                     text(
-#                         f"SELECT id FROM {
-#                             db1}.tickets WHERE `id` = :id and `eventId` = :eventId"
-#                     ),
-#                     {"id": ticket_id, "eventId": event_id},
-#                 )
-#                 existing_ticket = result.fetchone()
+# #         if not isinstance(updates, list) or not updates:
+# #             response.status_code = 400
+# #             return {"success": False, "message": "Invalid request body. 'verifications' must be a non-empty list."}
 
-#                 if existing_ticket:
-#                     ticket_id = existing_ticket[0]
-#                 else:
-#                     return {
-#                         "success": False,
-#                         "error": str('ticket id required'),
-#                     }
-#                 # else:
-#                 #     await conn.execute(
-#                 #         text(f"""
-#                 #             INSERT INTO {db1}.tickets (`id`, `name`, `price`, `eventId`, `stock`, `createdAt`, `updatedAt`, `adminFee`)
-#                 #             VALUES (:id, :name, :price, :eventId, :stock, :createdAt, :updatedAt, 0)
-#                 #         """),
-#                 #         {
-#                 #             "id": ticket_id,
-#                 #             "name": 'OTS',
-#                 #             "price": 0,
-#                 #             "eventId": event_id,
-#                 #             "stock": 100,
-#                 #             "createdAt": current_time,
-#                 #             "updatedAt": current_time,
-#                 #         },
-#                 #     )
+# #         async with online_engine.begin() as conn:
+# #             # Prepare update query
+# #             for verification in updates:
+# #                 hash_value = verification.get("hash")
+# #                 is_verify = verification.get("isVerify")
+# #                 verified_by_id = verification.get("verifiedById")
 
-#                 # Insert ke tabel `customers`
-#                 await conn.execute(
-#                     text(f"""
-#                         INSERT INTO {db1}.customers (`id`, `name`, `email`, `birthDate`, `phoneNumber`, `gender`, `createdAt`, `updatedAt`)
-#                         VALUES (:id, :name, :email, :birthDate, :phoneNumber, :gender, :createdAt, :updatedAt)
-#                     """),
-#                     {
-#                         "id": customer_id,
-#                         "name": ticket["customer_name"],
-#                         "email": ticket["customer_email"],
-#                         "birthDate": ticket["customer_birthdate"],
-#                         "phoneNumber": ticket["customer_phone"],
-#                         "gender": ticket["customer_gender"],
-#                         "createdAt": current_time,
-#                         "updatedAt": current_time,
-#                     },
-#                 )
+# #                 if not hash_value or is_verify is None:
+# #                     continue  # Skip invalid entries
 
-#                 # Insert ke tabel `orders`
-#                 await conn.execute(
-#                     text(f"""
-#                         INSERT INTO {db1}.orders (`id`, `status`, `createdAt`, `updatedAt`, `customerId`, `eventId`)
-#                         VALUES (:id, 'SUCCESS', :createdAt, :updatedAt, :customerId, :eventId)
-#                     """),
-#                     {
-#                         "id": order_id,
-#                         "createdAt": current_time,
-#                         "updatedAt": current_time,
-#                         "customerId": customer_id,
-#                         "eventId": event_id,
-#                     },
-#                 )
+# #                 # Set timezone to local
+# #                 local_tz = pytz.timezone("Asia/Makassar")
+# #                 current_datetime = datetime.now(local_tz)
 
-#                 # Insert ke tabel `orderdetails`
-#                 await conn.execute(
-#                     text(f"""
-#                         INSERT INTO {db1}.orderDetails (`id`, `ticketId`, `quantity`, `orderId`, `name`, `email`, `birthDate`, `phoneNumber`, `gender`, `address`, `socialMedia`, `location`, `commiteeName`)
-#                         VALUES (:id, :ticketId, 1, :orderId, :name, :email, :birthDate, :phoneNumber, :gender, :address, :socialMedia, :location, :commiteeName)
-#                     """),
-#                     {
-#                         "id": order_detail_id,
-#                         "ticketId": ticket_id,
-#                         "orderId": order_id,
-#                         "name": ticket["customer_name"],
-#                         "email": ticket["customer_email"],
-#                         "birthDate": ticket["customer_birthdate"],
-#                         "phoneNumber": ticket["customer_phone"],
-#                         "gender": ticket["customer_gender"],
-#                         "address": ticket["address"],
-#                         "socialMedia": ticket["social_media"],
-#                         "location": None,
-#                         "commiteeName": None,
-#                     },
-#                 )
+# #                 # Update query
+# #                 update_query = f"""
+# #                 UPDATE {db1}.TicketVerification AS tv
+# #                 INNER JOIN {db1}.orderDetails AS od ON tv.orderDetailId = od.id
+# #                 INNER JOIN {db1}.tickets AS t ON od.ticketId = t.id
+# #                 SET
+# #                     tv.isScanned = :is_verify,
+# #                     tv.updatedAt = :updated_at,
+# #                     tv.verifiedBy = :verified_by_id
+# #                 WHERE
+# #                     tv.hash = :hash_value
+# #                     AND t.eventId = :event_id
+# #                 """
 
-#                 # Insert ke tabel `ticketverification`
-#                 await conn.execute(
-#                     text(f"""
-#                         INSERT INTO {db1}.TicketVerification (`id`, `hash`, `isScanned`, `createdAt`, `updatedAt`, `orderDetailId`)
-#                         VALUES (:id, :hash, 1, :createdAt, :updatedAt, :orderDetailId)
-#                     """),
-#                     {
-#                         "id": str(uuid.uuid4()),
-#                         "hash": hash_value,
-#                         "createdAt": current_time,
-#                         "updatedAt": current_time,
-#                         "orderDetailId": order_detail_id,
-#                     },
-#                 )
+# #                 # Execute update
+# #                 await conn.execute(text(update_query), {
+# #                     "is_verify": 1 if is_verify else 0,
+# #                     "updated_at": current_datetime,
+# #                     "verified_by_id": verified_by_id,
+# #                     "hash_value": hash_value,
+# #                     "event_id": event_id,
+# #                 })
 
-#             return {
-#                 "success": True,
-#                 "message": "Tickets successfully synced.",
-#             }
+# #         # Return response
+# #         return {
+# #             "success": True,
+# #             "message": "Bulk ticket verifications updated successfully."
+# #         }
 
-#         except Exception as e:
-#             print(e)
-#             response.status_code = 500  # Internal Server Error
-#             return {
-#                 "success": False,
-#                 "error": str(e),
-#             }
+# #     except Exception as e:
+# #         print(e)
+# #         response.status_code = 500  # Internal Server Error
+# #         return {
+# #             "success": False,
+# #             "message": "An error occurred while processing the request.",
+# #             "error": str(e),
+# #         }
+
+# #     # Sync OTS
 
 
-# @ticket.get('/api/events/orders2')
+# # @ticket.put('/api/events/{event_id}/sync-offline-transactions')
+# # async def sync_ots(request: dict, event_id: str, response: Response):
+# #     tickets = request.get("data", [])  # Mengambil array tiket dari key 'data'
+# #     async with online_engine.begin() as conn:
+# #         try:
+# #             for ticket in tickets:
+# #                 # Diberikan di request body
+# #                 ticket_id = ticket.get("ticket_id")
+# #                 customer_id = uuid.uuid4()  # Fallback jika tidak ada
+# #                 order_id = ticket.get("order_id")  # Diberikan di request body
+# #                 # Diberikan di request body
+# #                 order_detail_id = ticket.get("order_detail_id")
+# #                 hash_value = ticket.get("hash")  # Diberikan di request body
+# #                 current_time = datetime.now()
+
+# #                 # Cek tiket yang ada di database
+# #                 result = await conn.execute(
+# #                     text(
+# #                         f"SELECT id FROM {
+# #                             db1}.tickets WHERE `id` = :id and `eventId` = :eventId"
+# #                     ),
+# #                     {"id": ticket_id, "eventId": event_id},
+# #                 )
+# #                 existing_ticket = result.fetchone()
+
+# #                 if existing_ticket:
+# #                     ticket_id = existing_ticket[0]
+# #                 else:
+# #                     return {
+# #                         "success": False,
+# #                         "error": str('ticket id required'),
+# #                     }
+# #                 # else:
+# #                 #     await conn.execute(
+# #                 #         text(f"""
+# #                 #             INSERT INTO {db1}.tickets (`id`, `name`, `price`, `eventId`, `stock`, `createdAt`, `updatedAt`, `adminFee`)
+# #                 #             VALUES (:id, :name, :price, :eventId, :stock, :createdAt, :updatedAt, 0)
+# #                 #         """),
+# #                 #         {
+# #                 #             "id": ticket_id,
+# #                 #             "name": 'OTS',
+# #                 #             "price": 0,
+# #                 #             "eventId": event_id,
+# #                 #             "stock": 100,
+# #                 #             "createdAt": current_time,
+# #                 #             "updatedAt": current_time,
+# #                 #         },
+# #                 #     )
+
+# #                 # Insert ke tabel `customers`
+# #                 await conn.execute(
+# #                     text(f"""
+# #                         INSERT INTO {db1}.customers (`id`, `name`, `email`, `birthDate`, `phoneNumber`, `gender`, `createdAt`, `updatedAt`)
+# #                         VALUES (:id, :name, :email, :birthDate, :phoneNumber, :gender, :createdAt, :updatedAt)
+# #                     """),
+# #                     {
+# #                         "id": customer_id,
+# #                         "name": ticket["customer_name"],
+# #                         "email": ticket["customer_email"],
+# #                         "birthDate": ticket["customer_birthdate"],
+# #                         "phoneNumber": ticket["customer_phone"],
+# #                         "gender": ticket["customer_gender"],
+# #                         "createdAt": current_time,
+# #                         "updatedAt": current_time,
+# #                     },
+# #                 )
+
+# #                 # Insert ke tabel `orders`
+# #                 await conn.execute(
+# #                     text(f"""
+# #                         INSERT INTO {db1}.orders (`id`, `status`, `createdAt`, `updatedAt`, `customerId`, `eventId`)
+# #                         VALUES (:id, 'SUCCESS', :createdAt, :updatedAt, :customerId, :eventId)
+# #                     """),
+# #                     {
+# #                         "id": order_id,
+# #                         "createdAt": current_time,
+# #                         "updatedAt": current_time,
+# #                         "customerId": customer_id,
+# #                         "eventId": event_id,
+# #                     },
+# #                 )
+
+# #                 # Insert ke tabel `orderdetails`
+# #                 await conn.execute(
+# #                     text(f"""
+# #                         INSERT INTO {db1}.orderDetails (`id`, `ticketId`, `quantity`, `orderId`, `name`, `email`, `birthDate`, `phoneNumber`, `gender`, `address`, `socialMedia`, `location`, `commiteeName`)
+# #                         VALUES (:id, :ticketId, 1, :orderId, :name, :email, :birthDate, :phoneNumber, :gender, :address, :socialMedia, :location, :commiteeName)
+# #                     """),
+# #                     {
+# #                         "id": order_detail_id,
+# #                         "ticketId": ticket_id,
+# #                         "orderId": order_id,
+# #                         "name": ticket["customer_name"],
+# #                         "email": ticket["customer_email"],
+# #                         "birthDate": ticket["customer_birthdate"],
+# #                         "phoneNumber": ticket["customer_phone"],
+# #                         "gender": ticket["customer_gender"],
+# #                         "address": ticket["address"],
+# #                         "socialMedia": ticket["social_media"],
+# #                         "location": None,
+# #                         "commiteeName": None,
+# #                     },
+# #                 )
+
+# #                 # Insert ke tabel `ticketverification`
+# #                 await conn.execute(
+# #                     text(f"""
+# #                         INSERT INTO {db1}.TicketVerification (`id`, `hash`, `isScanned`, `createdAt`, `updatedAt`, `orderDetailId`)
+# #                         VALUES (:id, :hash, 1, :createdAt, :updatedAt, :orderDetailId)
+# #                     """),
+# #                     {
+# #                         "id": str(uuid.uuid4()),
+# #                         "hash": hash_value,
+# #                         "createdAt": current_time,
+# #                         "updatedAt": current_time,
+# #                         "orderDetailId": order_detail_id,
+# #                     },
+# #                 )
+
+# #             return {
+# #                 "success": True,
+# #                 "message": "Tickets successfully synced.",
+# #             }
+
+# #         except Exception as e:
+# #             print(e)
+# #             response.status_code = 500  # Internal Server Error
+# #             return {
+# #                 "success": False,
+# #                 "error": str(e),
+# #             }
+
+
 # async def read_orders2(
 #     response: Response,
 #     search: Optional[str] = Query(None, description="Search by name or email"),
@@ -1125,5 +1119,5 @@
 #         return {"success": False, "error": str(e)}
 
 
-# if __name__ == "__main__":
-#     uvicorn.run("main:app", host="0.0.0.0", port=3000, reload=True)
+# # if __name__ == "__main__":
+# #     uvicorn.run("main:app", host="0.0.0.0", port=3000, reload=True)
