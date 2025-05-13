@@ -1,1 +1,1 @@
-from routes.ticket import ticket
+from routes.kartjis import ticket
